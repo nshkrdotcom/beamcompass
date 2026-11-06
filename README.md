@@ -77,7 +77,7 @@ mix beamcompass.report ../../fixtures/ledger_sample --out /tmp/beamcompass.html
 The implementation docset is a **separate directory/repository** and should be
 extracted at:
 
-`~/p/g/n/brainstorms/nshkrdotcom/docs/20261106/codebase_nav/impl_docs`
+`~/p/g/n/brainstorms/nshkrdotcom/docs/20261106/beamcompass/impl_docs`
 
 Start there with `README.md`, `control/state.json`, and
 `control/NEXT_AGENT.md`. The docset carries the authoritative phase sequence,
