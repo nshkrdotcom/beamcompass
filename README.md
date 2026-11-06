@@ -1,3 +1,12 @@
+<p align="center">
+  <img src="assets/beamcompass.svg" alt="BeamCompass" width="200" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/nshkrdotcom/beamcompass"><img src="https://img.shields.io/badge/GitHub-beamcompass-181717?logo=github" alt="GitHub repository" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" /></a>
+</p>
+
 # BeamCompass
 
 **Phase P01A source generation complete; Elixir runtime verification pending P01B.**
@@ -13,9 +22,9 @@ work and are not asserted by current output.
 
 ## Structure
 
-- `beamcompass_core/`: independent Mix app, core API, scanner, snapshot codec,
+- `monorepo/beamcompass_core/`: independent Mix app, core API, scanner, snapshot codec,
   basic projections, CLI and ExUnit suite.
-- `beamcompass_web/`: independent Mix app depending only on the core through a
+- `monorepo/beamcompass_web/`: independent Mix app depending only on the core through a
   path dependency; currently produces static HTML reports. Phoenix/LiveView is
   explicitly deferred to P05.
 - `fixtures/ledger_sample/`: small OTP application for regression tests.
@@ -41,7 +50,7 @@ agent should fix any issues and update the separate implementation docset.
 ## Core API
 
 ```elixir
-{:ok, snapshot} = BeamCompass.scan("../fixtures/ledger_sample")
+{:ok, snapshot} = BeamCompass.scan("../../fixtures/ledger_sample")
 BeamCompass.inventory(snapshot)
 {:ok, view} = BeamCompass.project(snapshot, lens: :effects, budget: 30)
 BeamCompass.explain(snapshot, hd(snapshot.facts).id)
@@ -49,17 +58,17 @@ BeamCompass.diff(snapshot, another_snapshot)
 BeamCompass.save(snapshot, "/tmp/beamcompass-snapshot.json")
 ```
 
-Inside `beamcompass_core`:
+Inside `monorepo/beamcompass_core`:
 
 ```sh
-mix beamcompass.scan ../fixtures/ledger_sample --out /tmp/beamcompass.json
-mix beamcompass.inventory ../fixtures/ledger_sample
+mix beamcompass.scan ../../fixtures/ledger_sample --out /tmp/beamcompass.json
+mix beamcompass.inventory ../../fixtures/ledger_sample
 ```
 
-Inside `beamcompass_web`:
+Inside `monorepo/beamcompass_web`:
 
 ```sh
-mix beamcompass.report ../fixtures/ledger_sample --out /tmp/beamcompass.html
+mix beamcompass.report ../../fixtures/ledger_sample --out /tmp/beamcompass.html
 ```
 
 ## Separate authoritative docset
@@ -80,4 +89,10 @@ acceptance criteria, approvals and handoff status. Keep it in sync with code.
 - Source anchors identify start positions, not complete byte ranges.
 - The first HTML report is a static inspection artifact, not a Phoenix app.
 - No Elixir compilation, format, test, Credo or Dialyzer result is asserted yet.
-- No `mix.lock` is supplied because dependencies have not been fetched.
+- Dependency lockfiles are supplied for both Mix applications.
+
+## Documentation and licensing
+
+- [Core application](monorepo/beamcompass_core/README.md) · [Core changelog](monorepo/beamcompass_core/CHANGELOG.md)
+- [Report application](monorepo/beamcompass_web/README.md) · [Report changelog](monorepo/beamcompass_web/CHANGELOG.md)
+- [MIT License](LICENSE) — Copyright (c) 2026 nshkrdotcom
