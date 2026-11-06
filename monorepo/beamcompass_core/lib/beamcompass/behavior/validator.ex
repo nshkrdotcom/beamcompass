@@ -31,9 +31,8 @@ defmodule BeamCompass.Behavior.Validator do
          :ok <- entity_integrity(entities, evidence),
          :ok <- relation_integrity(relations, entities, evidence),
          :ok <- issues_integrity(snapshot["issues"], evidence),
-         :ok <- insist(sorted_set?(snapshot["limitations"]), :invalid_limitations),
-         :ok <- insist(snapshot["snapshot_id"] == fingerprint(snapshot), :snapshot_hash_mismatch) do
-      :ok
+         :ok <- insist(sorted_set?(snapshot["limitations"]), :invalid_limitations) do
+      insist(snapshot["snapshot_id"] == fingerprint(snapshot), :snapshot_hash_mismatch)
     end
   end
 
@@ -74,13 +73,14 @@ defmodule BeamCompass.Behavior.Validator do
   def validate_reference(snapshot, reference) when is_map(reference) do
     with :ok <- validate(snapshot),
          :ok <- insist(keys?(reference, reference_keys()), :invalid_reference),
-         :ok <- insist(
-           reference["provider"] == "beamcompass" and
-             reference["snapshot_schema_version"] == 2 and
-             reference["project_id"] == snapshot["project_id"] and
-             reference["snapshot_id"] == snapshot["snapshot_id"],
-           :wrong_reference_namespace
-         ),
+         :ok <-
+           insist(
+             reference["provider"] == "beamcompass" and
+               reference["snapshot_schema_version"] == 2 and
+               reference["project_id"] == snapshot["project_id"] and
+               reference["snapshot_id"] == snapshot["snapshot_id"],
+             :wrong_reference_namespace
+           ),
          {:ok, group} <- reference_group(snapshot, reference["object_kind"]),
          object when not is_nil(object) <- Enum.find(group, &(&1["id"] == reference["object_id"])),
          :ok <- insist(sorted_set?(reference["evidence_ids"]), :invalid_reference_evidence),
@@ -128,21 +128,22 @@ defmodule BeamCompass.Behavior.Validator do
     providers = m["providers"]
     toolchain = m["toolchain"]
 
-    with :ok <- insist(
-           keys?(m, ~w(source_revision source_digest config_digest toolchain providers)) and
-           (is_nil(m["source_revision"]) or text?(m["source_revision"])) and
-           hex?(m["source_digest"]) and hex?(m["config_digest"]) and
-           is_map(toolchain) and keys?(toolchain, ~w(elixir otp)) and
-           text?(toolchain["elixir"]) and text?(toolchain["otp"]),
-           :invalid_manifest
-         ),
-         {:ok, _} <- indexed(providers, :providers),
-         :ok <- insist(providers != [] and Enum.all?(providers, &provider?/1), :invalid_provider) do
-      :ok
+    with :ok <-
+           insist(
+             keys?(m, ~w(source_revision source_digest config_digest toolchain providers)) and
+               (is_nil(m["source_revision"]) or text?(m["source_revision"])) and
+               hex?(m["source_digest"]) and hex?(m["config_digest"]) and
+               toolchain?(toolchain),
+             :invalid_manifest
+           ),
+         {:ok, _} <- indexed(providers, :providers) do
+      insist(providers != [] and Enum.all?(providers, &provider?/1), :invalid_provider)
     end
   end
 
   defp manifest(_), do: {:error, :invalid_manifest}
+
+  defp toolchain?(t), do: keys?(t, ~w(elixir otp)) and text?(t["elixir"]) and text?(t["otp"])
 
   defp provider?(p) do
     keys?(p, ~w(id name version mode trust_context)) and
@@ -152,7 +153,7 @@ defmodule BeamCompass.Behavior.Validator do
 
   defp indexed(items, name) when is_list(items) do
     if Enum.all?(items, &(is_map(&1) and text?(&1["id"]))) and
-         Enum.map(items, & &1["id"]) == (Enum.map(items, & &1["id"]) |> Enum.uniq() |> Enum.sort()) do
+         Enum.map(items, & &1["id"]) == Enum.map(items, & &1["id"]) |> Enum.uniq() |> Enum.sort() do
       {:ok, Map.new(items, &{&1["id"], &1})}
     else
       {:error, {:invalid_collection, name}}
@@ -164,21 +165,24 @@ defmodule BeamCompass.Behavior.Validator do
   defp evidence_integrity(evidence, providers) do
     provider_ids = MapSet.new(Enum.map(providers, & &1["id"]))
 
-    with :ok <- insist(Enum.all?(evidence, fn {_id, ev} ->
-           keys?(ev, ~w(id provider_id mode anchor basis input_evidence_ids)) and
-             MapSet.member?(provider_ids, ev["provider_id"]) and
-             ev["mode"] == "source" and text?(ev["basis"]) and
-             anchor?(ev["anchor"]) and sorted_set?(ev["input_evidence_ids"]) and
-             Enum.all?(ev["input_evidence_ids"], &Map.has_key?(evidence, &1))
-         end), :invalid_evidence),
-         :ok <- acyclic(evidence) do
-      :ok
+    with :ok <-
+           insist(
+             Enum.all?(evidence, fn {_id, ev} ->
+               keys?(ev, ~w(id provider_id mode anchor basis input_evidence_ids)) and
+                 MapSet.member?(provider_ids, ev["provider_id"]) and
+                 ev["mode"] == "source" and text?(ev["basis"]) and
+                 anchor?(ev["anchor"]) and sorted_set?(ev["input_evidence_ids"]) and
+                 Enum.all?(ev["input_evidence_ids"], &Map.has_key?(evidence, &1))
+             end),
+             :invalid_evidence
+           ) do
+      acyclic(evidence)
     end
   end
 
   defp acyclic(evidence) do
-    Enum.reduce_while(Map.keys(evidence), {:ok, MapSet.new()}, fn id, {:ok, seen} ->
-      case visit(id, evidence, seen, MapSet.new()) do
+    Enum.reduce_while(Map.keys(evidence), {:ok, %{}}, fn id, {:ok, seen} ->
+      case visit(id, evidence, seen, %{}) do
         {:ok, updated} -> {:cont, {:ok, updated}}
         :cycle -> {:halt, {:error, :cyclic_evidence}}
       end
@@ -191,51 +195,78 @@ defmodule BeamCompass.Behavior.Validator do
 
   defp visit(id, evidence, seen, active) do
     cond do
-      MapSet.member?(active, id) -> :cycle
-      MapSet.member?(seen, id) -> {:ok, seen}
-      true ->
-        active = MapSet.put(active, id)
+      Map.has_key?(active, id) ->
+        :cycle
 
-        Enum.reduce_while(evidence[id]["input_evidence_ids"], {:ok, seen}, fn parent, {:ok, updated} ->
-          case visit(parent, evidence, updated, active) do
-            {:ok, next} -> {:cont, {:ok, next}}
-            :cycle -> {:halt, :cycle}
-          end
+      Map.has_key?(seen, id) ->
+        {:ok, seen}
+
+      true ->
+        active = Map.put(active, id, true)
+
+        Enum.reduce_while(evidence[id]["input_evidence_ids"], {:ok, seen}, fn parent,
+                                                                              {:ok, updated} ->
+          visit_parent(parent, evidence, updated, active)
         end)
         |> case do
-          {:ok, updated} -> {:ok, MapSet.put(updated, id)}
+          {:ok, updated} -> {:ok, Map.put(updated, id, true)}
           :cycle -> :cycle
         end
     end
   end
 
+  defp visit_parent(parent, evidence, updated, active) do
+    case visit(parent, evidence, updated, active) do
+      {:ok, next} -> {:cont, {:ok, next}}
+      :cycle -> {:halt, :cycle}
+    end
+  end
+
   defp entity_integrity(entities, evidence) do
-    insist(Enum.all?(entities, fn {_id, e} ->
-      keys?(e, ~w(id kind label semantic_key epistemic_status evidence_ids limitations)) and
-        e["kind"] in @entity_kinds and text?(e["label"]) and
-        (is_nil(e["semantic_key"]) or text?(e["semantic_key"])) and
-        e["epistemic_status"] in @statuses and
-        cited?(e["evidence_ids"], evidence, true) and sorted_set?(e["limitations"])
-    end), :invalid_entity)
+    insist(
+      Enum.all?(entities, fn {_id, e} ->
+        keys?(e, ~w(id kind label semantic_key epistemic_status evidence_ids limitations)) and
+          e["kind"] in @entity_kinds and text?(e["label"]) and
+          (is_nil(e["semantic_key"]) or text?(e["semantic_key"])) and
+          e["epistemic_status"] in @statuses and
+          cited?(e["evidence_ids"], evidence, true) and sorted_set?(e["limitations"])
+      end),
+      :invalid_entity
+    )
   end
 
   defp relation_integrity(relations, entities, evidence) do
-    insist(Enum.all?(relations, fn {_id, r} ->
-      source = entities[r["source_id"]]
-      target = entities[r["target_id"]]
-      resolution = r["resolution"]
-      kind = r["kind"]
+    insist(
+      Enum.all?(relations, fn {_id, r} ->
+        source = entities[r["source_id"]]
+        target = entities[r["target_id"]]
+        kind = r["kind"]
 
-      keys?(r, ~w(id kind source_id target_id resolution epistemic_status evidence_ids rationale)) and
-        kind in @relation_kinds and not is_nil(source) and
-        (is_nil(r["target_id"]) or not is_nil(target)) and
-        resolution in @resolutions and r["epistemic_status"] in @statuses and
-        text?(r["rationale"]) and cited?(r["evidence_ids"], evidence, true) and
-        (resolution != "resolved" or not is_nil(target)) and
-        (resolution != "unresolved" or (is_nil(target) and r["epistemic_status"] == "unresolved")) and
-        typed_effect?(kind, source, target)
-    end), :invalid_relation)
+        keys?(
+          r,
+          ~w(id kind source_id target_id resolution epistemic_status evidence_ids rationale)
+        ) and
+          kind in @relation_kinds and not is_nil(source) and
+          target_exists?(r, target) and
+          relation_status?(r) and
+          text?(r["rationale"]) and cited?(r["evidence_ids"], evidence, true) and
+          resolution_valid?(r, target) and
+          typed_effect?(kind, source, target)
+      end),
+      :invalid_relation
+    )
   end
+
+  defp relation_status?(r),
+    do: r["resolution"] in @resolutions and r["epistemic_status"] in @statuses
+
+  defp target_exists?(r, target), do: is_nil(r["target_id"]) or not is_nil(target)
+  defp resolution_valid?(%{"resolution" => "resolved"}, target), do: not is_nil(target)
+
+  defp resolution_valid?(%{"resolution" => "unresolved"} = r, target),
+    do: is_nil(target) and r["epistemic_status"] == "unresolved"
+
+  defp resolution_valid?(_, _), do: true
 
   defp typed_effect?("performs_effect", source, target) do
     source["kind"] in ~w(function actor behavior transition) and
@@ -250,12 +281,16 @@ defmodule BeamCompass.Behavior.Validator do
   defp typed_effect?(_, _, _), do: true
 
   defp issues_integrity(issues, evidence) do
-    valid? = Enum.all?(issues, fn issue ->
-      keys?(issue, ~w(code message evidence_ids)) and text?(issue["code"]) and
-        text?(issue["message"]) and cited?(issue["evidence_ids"], evidence, false)
-    end)
+    valid? =
+      Enum.all?(issues, fn issue ->
+        keys?(issue, ~w(code message evidence_ids)) and text?(issue["code"]) and
+          text?(issue["message"]) and cited?(issue["evidence_ids"], evidence, false)
+      end)
 
-    insist(valid? and issues == Enum.sort_by(issues, &{&1["code"], &1["message"], &1["evidence_ids"]}), :invalid_issues)
+    insist(
+      valid? and issues == Enum.sort_by(issues, &{&1["code"], &1["message"], &1["evidence_ids"]}),
+      :invalid_issues
+    )
   end
 
   defp anchor?(a) when is_map(a) do
@@ -267,12 +302,15 @@ defmodule BeamCompass.Behavior.Validator do
     keys?(a, ~w(path source_sha256 start_line start_column end_line end_column)) and
       safe_path?(a["path"]) and hex?(a["source_sha256"]) and
       positive_int?(start_line) and positive_int?(start_column) and
-      ((is_nil(end_line) and is_nil(end_column)) or
-         (positive_int?(end_line) and positive_int?(end_column) and
-            {end_line, end_column} >= {start_line, start_column}))
+      end_valid?(start_line, start_column, end_line, end_column)
   end
 
   defp anchor?(_), do: false
+
+  defp end_valid?(_, _, nil, nil), do: true
+
+  defp end_valid?(sl, sc, el, ec),
+    do: positive_int?(el) and positive_int?(ec) and {el, ec} >= {sl, sc}
 
   defp safe_path?(path) when is_binary(path) do
     parts = String.split(path, "/")
@@ -290,7 +328,7 @@ defmodule BeamCompass.Behavior.Validator do
   end
 
   defp sorted_set?(list) when is_list(list) do
-    Enum.all?(list, &text?/1) and list == (list |> Enum.uniq() |> Enum.sort())
+    Enum.all?(list, &text?/1) and list == list |> Enum.uniq() |> Enum.sort()
   end
 
   defp sorted_set?(_), do: false

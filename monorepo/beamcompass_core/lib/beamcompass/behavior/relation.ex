@@ -1,7 +1,13 @@
 defmodule BeamCompass.Behavior.Relation do
   @moduledoc "Typed v2 relation with separate target resolution and epistemic status."
   @enforce_keys [
-    :id, :kind, :source_id, :target_id, :resolution, :epistemic_status, :evidence_ids,
+    :id,
+    :kind,
+    :source_id,
+    :target_id,
+    :resolution,
+    :epistemic_status,
+    :evidence_ids,
     :rationale
   ]
   defstruct @enforce_keys

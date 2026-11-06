@@ -16,12 +16,13 @@ defmodule BeamCompass.Behavior.Store do
     directory = Path.dirname(path)
 
     with :ok <- File.mkdir_p(directory) do
-      temporary = Path.join(directory, ".#{Path.basename(path)}.#{System.unique_integer([:positive])}.tmp")
+      temporary =
+        Path.join(directory, ".#{Path.basename(path)}.#{System.unique_integer([:positive])}.tmp")
 
       try do
-        with :ok <- File.write(temporary, Json.encode(data) <> "\n", [:write, :binary, :exclusive]),
-             :ok <- File.rename(temporary, path) do
-          :ok
+        with :ok <-
+               File.write(temporary, Json.encode(data) <> "\n", [:write, :binary, :exclusive]) do
+          File.rename(temporary, path)
         end
       after
         File.rm(temporary)

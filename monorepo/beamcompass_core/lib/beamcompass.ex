@@ -70,29 +70,7 @@ defmodule BeamCompass do
 
   def export_source(path, options) when is_binary(path) and is_list(options) do
     if Keyword.keyword?(options) do
-      namespace = Keyword.get(options, :project_id)
-      schema = Keyword.get(options, :schema, 2)
-      mode = Keyword.get(options, :mode, :source)
-
-      cond do
-        not is_binary(namespace) or String.trim(namespace) == "" ->
-          {:error, :project_id_required}
-
-        (Keyword.keys(options) -- [:project_id, :schema, :mode]) != [] ->
-          {:error, :unsupported_export_option}
-
-        schema != 2 ->
-          {:error, :unsupported_snapshot_version}
-
-        mode != :source ->
-          {:error, :unsupported_evidence_mode}
-
-        true ->
-          case Export.scan(path, namespace) do
-            {:ok, %{snapshot: snapshot}} -> {:ok, snapshot}
-            error -> error
-          end
-      end
+      export_with_options(path, options)
     else
       {:error, :invalid_export_options}
     end
@@ -101,13 +79,44 @@ defmodule BeamCompass do
   def export_source(%Snapshot{}, _options), do: {:error, :missing_provenance}
   def export_source(_, _), do: {:error, :invalid_source_path}
 
+  defp export_with_options(path, options) do
+    namespace = Keyword.get(options, :project_id)
+    schema = Keyword.get(options, :schema, 2)
+    mode = Keyword.get(options, :mode, :source)
+
+    cond do
+      not is_binary(namespace) or String.trim(namespace) == "" ->
+        {:error, :project_id_required}
+
+      Keyword.keys(options) -- [:project_id, :schema, :mode] != [] ->
+        {:error, :unsupported_export_option}
+
+      schema != 2 ->
+        {:error, :unsupported_snapshot_version}
+
+      mode != :source ->
+        {:error, :unsupported_evidence_mode}
+
+      true ->
+        export_snapshot(path, namespace)
+    end
+  end
+
+  defp export_snapshot(path, namespace) do
+    case Export.scan(path, namespace) do
+      {:ok, %{snapshot: snapshot}} -> {:ok, snapshot}
+      error -> error
+    end
+  end
+
   @doc "Generate a portable exact reference to a v2 entity, relation or evidence record."
   @spec source_reference(map(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def source_reference(snapshot, kind, id), do: Validator.reference(snapshot, kind, id)
 
   @doc "Validate an exact v2 reference without joining on labels or semantic keys."
   @spec resolve_source_reference(map(), map()) :: {:ok, map()} | {:error, term()}
-  def resolve_source_reference(snapshot, reference), do: Validator.validate_reference(snapshot, reference)
+  def resolve_source_reference(snapshot, reference),
+    do: Validator.validate_reference(snapshot, reference)
 
   @doc "Atomically persist a validated v2 export. `save/2` remains the v1 writer."
   @spec save_source(map(), String.t()) :: :ok | {:error, term()}

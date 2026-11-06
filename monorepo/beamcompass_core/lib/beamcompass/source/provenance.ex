@@ -62,7 +62,9 @@ defmodule BeamCompass.Source.Provenance do
 
   defp parse_source(source) do
     case Quoted.scan(source.bytes, source.path) do
-      {:ok, facts} -> Map.merge(Map.delete(source, :bytes), %{facts: facts, issue: nil})
+      {:ok, facts} ->
+        Map.merge(Map.delete(source, :bytes), %{facts: facts, issue: nil})
+
       {:error, reason} ->
         Map.merge(Map.delete(source, :bytes), %{facts: [], issue: reason})
     end

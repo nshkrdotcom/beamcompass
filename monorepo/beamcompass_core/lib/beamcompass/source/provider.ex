@@ -5,6 +5,7 @@ defmodule BeamCompass.Source.Provider do
   No adapter may load a target's Mix configuration, expand target macros,
   compile its modules, or emit non-source evidence in P02.
   """
-  @callback scan(binary(), String.t()) :: {:ok, [BeamCompass.Model.Fact.t()]} | {:error, String.t()}
+  @callback scan(binary(), String.t()) ::
+              {:ok, [BeamCompass.Model.Fact.t()]} | {:error, String.t()}
   @callback identity() :: map()
 end

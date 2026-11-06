@@ -14,7 +14,8 @@ defmodule BeamCompass.Source.Providers.Quoted do
       "name" => "beamcompass-elixir-quoted-ast",
       "version" => "1 (Elixir #{System.version()})",
       "mode" => "source",
-      "trust_context" => "in-process quoted AST parser; target code, mix.exs and macros not evaluated"
+      "trust_context" =>
+        "in-process quoted AST parser; target code, mix.exs and macros not evaluated"
     }
   end
 end

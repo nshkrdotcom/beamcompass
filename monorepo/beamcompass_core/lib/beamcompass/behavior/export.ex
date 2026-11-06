@@ -101,8 +101,16 @@ defmodule BeamCompass.Behavior.Export do
 
   defp entry(fact, source) do
     evidence = %Evidence{
-      id: "evidence:" <> Id.for_parts(["v2", source.path, fact.id, source.sha256,
-                                       fact.anchor["line"], fact.anchor["column"]]),
+      id:
+        "evidence:" <>
+          Id.for_parts([
+            "v2",
+            source.path,
+            fact.id,
+            source.sha256,
+            fact.anchor["line"],
+            fact.anchor["column"]
+          ]),
       provider_id: @provider_id,
       mode: "source",
       anchor: %{
@@ -133,13 +141,23 @@ defmodule BeamCompass.Behavior.Export do
       nil
     else
       proposed? = kind in ["effect_intent", "state_holder", "transition"]
+
       limitations =
         case kind do
-          "effect" -> ["explicit syntactic call site only; effect not proven executed"]
-          "effect_intent" -> ["constructor/tag suggests intent; execution and interpretation unknown"]
-          "transition" -> ["Map operation does not prove process-state transition"]
-          "actor" -> ["OTP role declaration, not proven live process"]
-          _ -> ["source declaration; runtime reachability unverified"]
+          "effect" ->
+            ["explicit syntactic call site only; effect not proven executed"]
+
+          "effect_intent" ->
+            ["constructor/tag suggests intent; execution and interpretation unknown"]
+
+          "transition" ->
+            ["Map operation does not prove process-state transition"]
+
+          "actor" ->
+            ["OTP role declaration, not proven live process"]
+
+          _ ->
+            ["source declaration; runtime reachability unverified"]
         end
 
       %Entity{
@@ -160,9 +178,11 @@ defmodule BeamCompass.Behavior.Export do
   defp entity_kind(%{kind: :handler}), do: "trigger"
   defp entity_kind(%{kind: :intent_candidate}), do: "effect_intent"
   defp entity_kind(%{kind: :effect_site}), do: "effect"
+
   defp entity_kind(%{kind: :call, object: object})
        when object in ["Map.put/3", "Map.update/4", "Map.update!/3"],
        do: "transition"
+
   defp entity_kind(_), do: nil
 
   defp semantic_key(kind, fact, project) when kind in ["module", "function"] do
@@ -196,8 +216,15 @@ defmodule BeamCompass.Behavior.Export do
         module_of(item.fact.subject) == entry.fact.subject
     end)
     |> Enum.map(fn item ->
-      relation("implements", entry, item, item, "resolved", "derived",
-        "module and function definitions occur in the same unexpanded source")
+      relation(
+        "implements",
+        entry,
+        item,
+        item,
+        "resolved",
+        "derived",
+        "module and function definitions occur in the same unexpanded source"
+      )
     end)
   end
 
@@ -205,8 +232,15 @@ defmodule BeamCompass.Behavior.Export do
     state = %{entry | entity: hd(auxiliary_entity(entry))}
 
     [
-      relation("owns_state", entry, state, entry, "possible", "proposed",
-        "#{fact.object} use suggests a process state holder; actual ownership unverified")
+      relation(
+        "owns_state",
+        entry,
+        state,
+        entry,
+        "possible",
+        "proposed",
+        "#{fact.object} use suggests a process state holder; actual ownership unverified"
+      )
     ]
   end
 
@@ -219,22 +253,49 @@ defmodule BeamCompass.Behavior.Export do
 
     case roles do
       [role] ->
-        [relation("handles", role, entry, entry, "resolved", "derived",
-           "declared OTP role and syntactic handler clause; runtime dispatch not proven")]
+        [
+          relation(
+            "handles",
+            role,
+            entry,
+            entry,
+            "resolved",
+            "derived",
+            "declared OTP role and syntactic handler clause; runtime dispatch not proven"
+          )
+        ]
 
       _ ->
-        unresolved_from_function("handles", entry, entries,
-          "no unambiguous actor declaration for handler; dispatch unknown")
+        unresolved_from_function(
+          "handles",
+          entry,
+          entries,
+          "no unambiguous actor declaration for handler; dispatch unknown"
+        )
     end
   end
 
   defp relations_for(%{fact: %{kind: :intent_candidate}} = entry, entries) do
     with_function(entry, entries, fn function ->
       [
-        relation("describes_effect", function, entry, entry, "resolved", "proposed",
-          "intent constructor/tag occurs in this function; interpretation unverified"),
-        relation("performs_effect", function, nil, entry, "unresolved", "unresolved",
-          "constructor is descriptive data, not evidence of an effect performer")
+        relation(
+          "describes_effect",
+          function,
+          entry,
+          entry,
+          "resolved",
+          "proposed",
+          "intent constructor/tag occurs in this function; interpretation unverified"
+        ),
+        relation(
+          "performs_effect",
+          function,
+          nil,
+          entry,
+          "unresolved",
+          "unresolved",
+          "constructor is descriptive data, not evidence of an effect performer"
+        )
       ]
     end)
   end
@@ -242,8 +303,15 @@ defmodule BeamCompass.Behavior.Export do
   defp relations_for(%{fact: %{kind: :effect_site}} = entry, entries) do
     with_function(entry, entries, fn function ->
       [
-        relation("performs_effect", function, entry, entry, "resolved", "derived",
-          "direct explicit effect API call site in the function; runtime execution unproven")
+        relation(
+          "performs_effect",
+          function,
+          entry,
+          entry,
+          "resolved",
+          "derived",
+          "direct explicit effect API call site in the function; runtime execution unproven"
+        )
       ]
     end)
   end
@@ -259,18 +327,41 @@ defmodule BeamCompass.Behavior.Export do
       call =
         case candidates do
           [target] ->
-            relation("calls", function, target, entry, "resolved", "derived",
-              "fully qualified source call target uniquely declared in this project")
+            relation(
+              "calls",
+              function,
+              target,
+              entry,
+              "resolved",
+              "derived",
+              "fully qualified source call target uniquely declared in this project"
+            )
 
           _ ->
-            relation("calls", function, nil, entry, "unresolved", "unresolved",
-              "call target not uniquely declared in scanned project; may be external, alias or dynamic")
+            relation(
+              "calls",
+              function,
+              nil,
+              entry,
+              "unresolved",
+              "unresolved",
+              "call target not uniquely declared in scanned project; may be external, alias or dynamic"
+            )
         end
 
       transitions =
         if not is_nil(entry.entity) and entry.entity.kind == "transition" do
-          [relation("updates_state", function, entry, entry, "resolved", "proposed",
-             "Map update syntax is a candidate state change, not proof of stored state")]
+          [
+            relation(
+              "updates_state",
+              function,
+              entry,
+              entry,
+              "resolved",
+              "proposed",
+              "Map update syntax is a candidate state change, not proof of stored state"
+            )
+          ]
         else
           []
         end
@@ -280,14 +371,22 @@ defmodule BeamCompass.Behavior.Export do
   end
 
   defp relations_for(%{fact: %{kind: :message_send}} = entry, entries) do
-    unresolved_from_function("sends", entry, entries,
-      "send/2 syntax found, but recipient and delivery are not statically established")
+    unresolved_from_function(
+      "sends",
+      entry,
+      entries,
+      "send/2 syntax found, but recipient and delivery are not statically established"
+    )
   end
 
   defp relations_for(%{fact: %{kind: :unresolved, object: object}} = entry, entries) do
     if String.starts_with?(object, "apply/") do
-      unresolved_from_function("calls", entry, entries,
-        "dynamic apply call cannot be safely resolved from source")
+      unresolved_from_function(
+        "calls",
+        entry,
+        entries,
+        "dynamic apply call cannot be safely resolved from source"
+      )
     else
       []
     end
@@ -319,8 +418,10 @@ defmodule BeamCompass.Behavior.Export do
 
   defp relation(kind, from, to, anchor, resolution, status, rationale) do
     target_id = if(is_nil(to), do: nil, else: to.entity.id)
-    id = "relation:" <> Id.for_parts(["v2", kind, from.entity.id, target_id || "?",
-                                       anchor.fact.id, rationale])
+
+    id =
+      "relation:" <>
+        Id.for_parts(["v2", kind, from.entity.id, target_id || "?", anchor.fact.id, rationale])
 
     parents =
       [from.evidence.id, anchor.evidence.id] ++

@@ -24,7 +24,9 @@ defmodule Mix.Tasks.Beamcompass.Export do
     if length(paths) != 1 or invalid != [] or Keyword.get(options, :schema) != 2 or
          not valid_namespace?(Keyword.get(options, :project_id)) or
          is_nil(Keyword.get(options, :out)) do
-      Mix.raise("usage: mix beamcompass.export PATH --schema 2 --project-id NAMESPACE --out FILE [--manifest INPUTS_JSON]")
+      Mix.raise(
+        "usage: mix beamcompass.export PATH --schema 2 --project-id NAMESPACE --out FILE [--manifest INPUTS_JSON]"
+      )
     end
 
     [path] = paths
