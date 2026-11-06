@@ -1,0 +1,17 @@
+# Independent Mix projects in this Poncho repository
+**/_build/
+**/deps/
+**/.elixir_ls/
+**/erl_crash.dump
+**/*.ez
+**/*.beam
+**/cover/
+**/.fetch
+**/.dialyzer/
+**/doc/
+*.swp
+*.swo
+.DS_Store
+# Generated analysis artifacts
+output/
+*.tmp
