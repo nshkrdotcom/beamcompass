@@ -4,7 +4,7 @@ defmodule BeamCompassWeb.ReportTest do
   alias BeamCompass.Model.{Fact, Snapshot}
   alias BeamCompassWeb.Report
 
-  @fixture Path.expand("../../fixtures/ledger_sample", __DIR__)
+  @fixture Path.expand("../../../fixtures/ledger_sample", __DIR__)
 
   test "renders all three supported views and a truthful limitations notice" do
     assert {:ok, snapshot} = BeamCompass.scan(@fixture)
@@ -29,16 +29,20 @@ defmodule BeamCompassWeb.ReportTest do
     }
 
     snapshot = %Snapshot{
-      id: "example",
+      id: "<img src=x onerror=alert(1)>",
       projects: [],
       facts: [fact],
       capsules: [],
-      issues: []
+      issues: [%{"path" => "<script>path</script>", "reason" => "<script>reason</script>"}]
     }
 
     html = Report.render(snapshot)
     assert html =~ "&lt;script&gt;alert(1)&lt;/script&gt;"
     assert html =~ "&amp;&quot;"
     refute html =~ "<script>alert(1)</script>"
+    assert html =~ "&lt;img src=x onerror=alert(1)&gt;"
+    assert html =~ "&lt;script&gt;path&lt;/script&gt;"
+    assert html =~ "&lt;script&gt;reason&lt;/script&gt;"
+    refute html =~ "<script>"
   end
 end

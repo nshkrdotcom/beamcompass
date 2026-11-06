@@ -19,7 +19,10 @@ defmodule Mix.Tasks.Beamcompass.Scan do
           {:ok, snapshot} ->
             out = Keyword.get(opts, :out, "beamcompass-snapshot.json")
             :ok = BeamCompass.save(snapshot, out)
-            Mix.shell().info("Saved #{out} (#{length(snapshot.facts)} facts; #{length(snapshot.issues)} issues)")
+
+            Mix.shell().info(
+              "Saved #{out} (#{length(snapshot.facts)} facts; #{length(snapshot.issues)} issues)"
+            )
 
           {:error, reason} ->
             Mix.raise("scan failed: #{inspect(reason)}")

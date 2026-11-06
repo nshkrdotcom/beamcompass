@@ -46,7 +46,7 @@ defmodule BeamCompass.Source.Scanner do
 
   defp scan_module(module_name, body, meta, source, path) do
     module_fact =
-      make_fact(:module, module_name, "definition", :source, meta, path, source, %{}, 0)
+      make_fact(:module, module_name, "definition", :source, meta, {path, source}, %{}, 0)
 
     [module_fact | Enum.flat_map(forms(body), &scan_form(&1, module_name, source, path))]
   end
@@ -58,7 +58,7 @@ defmodule BeamCompass.Source.Scanner do
     name = Macro.to_string(behaviour)
 
     if name in ["GenServer", "Supervisor", "Agent", "GenStage", ":gen_statem"] do
-      [make_fact(:role, module_name, name, :source, meta, path, source, %{}, 0)]
+      [make_fact(:role, module_name, name, :source, meta, {path, source}, %{}, 0)]
     else
       []
     end
@@ -73,7 +73,7 @@ defmodule BeamCompass.Source.Scanner do
         details = %{"clause" => head_text, "visibility" => Atom.to_string(visibility)}
 
         function_fact =
-          make_fact(:function, subject, head_text, :source, meta, path, source, details, 0)
+          make_fact(:function, subject, head_text, :source, meta, {path, source}, details, 0)
 
         handler_facts =
           if function in @handler_names and length(args) in [2, 3] do
@@ -84,8 +84,7 @@ defmodule BeamCompass.Source.Scanner do
                 Macro.to_string(hd(args)),
                 :source,
                 meta,
-                path,
-                source,
+                {path, source},
                 %{"clause" => head_text},
                 0
               )
@@ -107,8 +106,7 @@ defmodule BeamCompass.Source.Scanner do
               event.object,
               event.status,
               event.meta,
-              path,
-              source,
+              {path, source},
               Map.put(event.details, "clause", head_text),
               index
             )
@@ -149,7 +147,9 @@ defmodule BeamCompass.Source.Scanner do
 
     effects =
       case effect_category(module, function) do
-        nil -> []
+        nil ->
+          []
+
         category ->
           [
             %{
@@ -164,7 +164,15 @@ defmodule BeamCompass.Source.Scanner do
 
     unknowns =
       if function == :apply or target in ["Kernel.apply/3", ":erlang.apply/3"] do
-        [%{kind: :unresolved, object: target, status: :unresolved, meta: location, details: %{"reason" => "dynamic_dispatch"}}]
+        [
+          %{
+            kind: :unresolved,
+            object: target,
+            status: :unresolved,
+            meta: location,
+            details: %{"reason" => "dynamic_dispatch"}
+          }
+        ]
       else
         []
       end
@@ -192,21 +200,45 @@ defmodule BeamCompass.Source.Scanner do
   end
 
   defp events_for({:apply, meta, args}, _fallback_meta) when is_list(args) do
-    [%{kind: :unresolved, object: "apply/#{length(args)}", status: :unresolved, meta: meta, details: %{"reason" => "dynamic_dispatch"}}]
+    [
+      %{
+        kind: :unresolved,
+        object: "apply/#{length(args)}",
+        status: :unresolved,
+        meta: meta,
+        details: %{"reason" => "dynamic_dispatch"}
+      }
+    ]
   end
 
   defp events_for({:%, meta, [name, _fields]}, _fallback_meta) do
     name_text = Macro.to_string(name)
 
     if String.contains?(name_text, "Intent") or String.ends_with?(name_text, "Effect") do
-      [%{kind: :intent_candidate, object: name_text, status: :proposed, meta: meta, details: %{"basis" => "struct_constructor_name"}}]
+      [
+        %{
+          kind: :intent_candidate,
+          object: name_text,
+          status: :proposed,
+          meta: meta,
+          details: %{"basis" => "struct_constructor_name"}
+        }
+      ]
     else
       []
     end
   end
 
   defp events_for({:{}, meta, [tag | _rest]}, _fallback_meta) when tag in @intent_tags do
-    [%{kind: :intent_candidate, object: Atom.to_string(tag), status: :proposed, meta: meta, details: %{"basis" => "tuple_tag"}}]
+    [
+      %{
+        kind: :intent_candidate,
+        object: Atom.to_string(tag),
+        status: :proposed,
+        meta: meta,
+        details: %{"basis" => "tuple_tag"}
+      }
+    ]
   end
 
   # Elixir represents two-element literal tuples as plain two-element AST tuples,
@@ -227,22 +259,51 @@ defmodule BeamCompass.Source.Scanner do
 
   defp effect_category(module, function) do
     cond do
-      module in ["File", "IO", "Port", "System"] -> "environment_io"
-      module in [":ets", ":dets", ":mnesia"] -> "shared_or_persistent_state"
-      module in [":gen_tcp", ":ssl", "Req", "Finch", "Mint"] -> "network"
-      module in ["GenServer", "Phoenix.PubSub", "Process"] and function in [:call, :cast, :send, :broadcast, :exit] -> "process_communication"
-      module in ["Task", "Supervisor", "DynamicSupervisor"] and function in [:start, :start_link, :start_child, :async] -> "process_lifecycle"
-      String.ends_with?(module, ".Repo") and function in [:insert, :update, :delete, :transaction, :insert!, :update!, :delete!] -> "persistence"
-      true -> nil
+      module in ["File", "IO", "Port", "System"] ->
+        "environment_io"
+
+      module in [":ets", ":dets", ":mnesia"] ->
+        "shared_or_persistent_state"
+
+      module in [":gen_tcp", ":ssl", "Req", "Finch", "Mint"] ->
+        "network"
+
+      true ->
+        process_or_persistence_effect(module, function)
     end
   end
 
-  defp make_fact(kind, subject, object, status, meta, path, source, details, occurrence) do
+  defp process_or_persistence_effect(module, function) do
+    cond do
+      module in ["GenServer", "Phoenix.PubSub", "Process"] and
+          function in [:call, :cast, :send, :broadcast, :exit] ->
+        "process_communication"
+
+      module in ["Task", "Supervisor", "DynamicSupervisor"] and
+          function in [:start, :start_link, :start_child, :async] ->
+        "process_lifecycle"
+
+      String.ends_with?(module, ".Repo") and
+          function in [:insert, :update, :delete, :transaction, :insert!, :update!, :delete!] ->
+        "persistence"
+
+      true ->
+        nil
+    end
+  end
+
+  defp make_fact(kind, subject, object, status, meta, {path, source}, details, occurrence) do
     clause = Map.get(details, "clause", "")
-    id = Id.for_parts([kind, subject, object, clause, occurrence])
+    id = Id.for_parts([path, kind, subject, object, clause, occurrence])
     line = max(1, Keyword.get(meta, :line, 1))
     column = max(1, Keyword.get(meta, :column, 1))
-    snippet = source |> String.split("\n") |> Enum.at(line - 1, "") |> String.trim() |> String.slice(0, 240)
+
+    snippet =
+      source
+      |> String.split("\n")
+      |> Enum.at(line - 1, "")
+      |> String.trim()
+      |> String.slice(0, 240)
 
     %Fact{
       id: id,

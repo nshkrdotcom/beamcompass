@@ -5,9 +5,8 @@ defmodule BeamCompass.Model.Store do
 
   @spec write(BeamCompass.Model.Snapshot.t(), String.t()) :: :ok | {:error, term()}
   def write(snapshot, path) do
-    with :ok <- File.mkdir_p(Path.dirname(path)),
-         :ok <- File.write(path, Codec.encode(snapshot) <> "\n") do
-      :ok
+    with :ok <- File.mkdir_p(Path.dirname(path)) do
+      File.write(path, Codec.encode(snapshot) <> "\n")
     end
   end
 

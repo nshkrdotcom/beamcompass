@@ -61,7 +61,7 @@ defmodule BeamCompassCore.MixProject do
         {"Analysis", ~r/^BeamCompass.Analysis/},
         {"Source inspection", ~r/^BeamCompass.Source/},
         {"Data model", ~r/^BeamCompass.Model/},
-        {"Utilities", [BeamCompass.JSON, BeamCompass.ID]},
+        {"Utilities", [BeamCompass.Json, BeamCompass.Id]},
         {"Mix tasks", ~r/^Mix.Tasks/}
       ]
     ]

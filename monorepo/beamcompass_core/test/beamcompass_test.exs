@@ -4,12 +4,17 @@ defmodule BeamCompassTest do
   alias BeamCompass.Model.{Codec, Store}
   alias BeamCompass.Source.Scanner
 
-  @fixture Path.expand("../../fixtures/ledger_sample", __DIR__)
+  @fixture Path.expand("../../../fixtures/ledger_sample", __DIR__)
 
   test "discovers a Mix project and builds source-grounded facts" do
     assert {:ok, snapshot} = BeamCompass.scan(@fixture)
-    assert length(snapshot.facts) > 0
-    assert Enum.any?(snapshot.facts, &(&1.kind == :module and &1.subject == "LedgerSample.Server"))
+    assert snapshot.facts != []
+
+    assert Enum.any?(
+             snapshot.facts,
+             &(&1.kind == :module and &1.subject == "LedgerSample.Server")
+           )
+
     assert Enum.any?(snapshot.facts, &(&1.kind == :role and &1.object == "GenServer"))
     assert Enum.any?(snapshot.facts, &(&1.kind == :handler))
     assert snapshot.issues == []
@@ -80,7 +85,10 @@ defmodule BeamCompassTest do
 
   test "portable snapshot persistence writes a usable JSON file" do
     assert {:ok, snapshot} = BeamCompass.scan(@fixture)
-    filename = Path.join(System.tmp_dir!(), "beamcompass_#{System.unique_integer([:positive])}.json")
+
+    filename =
+      Path.join(System.tmp_dir!(), "beamcompass_#{System.unique_integer([:positive])}.json")
+
     on_exit(fn -> File.rm(filename) end)
 
     assert :ok = Store.write(snapshot, filename)

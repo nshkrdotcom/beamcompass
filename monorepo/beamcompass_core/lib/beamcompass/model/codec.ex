@@ -1,8 +1,8 @@
 defmodule BeamCompass.Model.Codec do
   @moduledoc "Versioned portable snapshot encoding and decoding."
 
-  alias BeamCompass.Model.{Fact, Snapshot}
   alias BeamCompass.Json
+  alias BeamCompass.Model.{Fact, Snapshot}
 
   @spec export(Snapshot.t()) :: map()
   def export(%Snapshot{} = snapshot) do
@@ -21,7 +21,20 @@ defmodule BeamCompass.Model.Codec do
 
   @spec decode(binary()) :: {:ok, Snapshot.t()} | {:error, term()}
   def decode(content) do
-    with {:ok, %{"schema_version" => 1} = data} <- JSON.decode(content) do
+    case JSON.decode(content) do
+      {:ok, %{"schema_version" => 1} = data} ->
+        decode_snapshot(data)
+
+      {:ok, _} ->
+        {:error, :unsupported_snapshot_version}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp decode_snapshot(data) do
+    if valid_snapshot?(data) do
       {:ok,
        %Snapshot{
          schema_version: 1,
@@ -32,10 +45,34 @@ defmodule BeamCompass.Model.Codec do
          issues: data["issues"]
        }}
     else
-      {:ok, _} -> {:error, :unsupported_snapshot_version}
-      {:error, reason} -> {:error, reason}
+      {:error, :invalid_snapshot}
     end
   end
+
+  defp valid_snapshot?(data) do
+    is_binary(data["id"]) and data["id"] != "" and
+      Enum.all?(["projects", "capsules", "issues"], &map_list?(data[&1])) and
+      is_list(data["facts"]) and Enum.all?(data["facts"], &valid_fact?/1)
+  end
+
+  defp map_list?(items) when is_list(items), do: Enum.all?(items, &is_map/1)
+  defp map_list?(_), do: false
+
+  defp valid_fact?(data) when is_map(data) do
+    Enum.all?(["id", "subject", "object"], &is_binary(data[&1])) and
+      is_map(data["details"]) and valid_anchor?(data["anchor"]) and
+      data["kind"] in ~w(module role function handler call effect_site intent_candidate message_send unresolved) and
+      data["status"] in ~w(source proposed unresolved)
+  end
+
+  defp valid_fact?(_), do: false
+
+  defp valid_anchor?(anchor) when is_map(anchor) do
+    is_binary(anchor["path"]) and is_integer(anchor["line"]) and
+      is_integer(anchor["column"])
+  end
+
+  defp valid_anchor?(_), do: false
 
   defp fact_to_map(%Fact{} = fact) do
     %{
@@ -62,7 +99,17 @@ defmodule BeamCompass.Model.Codec do
     }
   end
 
-  for kind <- [:module, :role, :function, :handler, :call, :effect_site, :intent_candidate, :message_send, :unresolved] do
+  for kind <- [
+        :module,
+        :role,
+        :function,
+        :handler,
+        :call,
+        :effect_site,
+        :intent_candidate,
+        :message_send,
+        :unresolved
+      ] do
     defp decode_kind(unquote(Atom.to_string(kind))), do: unquote(kind)
   end
 

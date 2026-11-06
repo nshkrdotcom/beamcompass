@@ -10,7 +10,11 @@ defmodule BeamCompass.Analysis.Capsules do
     |> Enum.map(fn handler ->
       related =
         facts
-        |> Enum.filter(&(&1.subject == handler.subject and &1.kind in [:call, :effect_site, :intent_candidate, :message_send, :unresolved]))
+        |> Enum.filter(
+          &(&1.subject == handler.subject and &1.anchor["path"] == handler.anchor["path"] and
+              &1.details["clause"] == handler.details["clause"] and
+              &1.kind in [:call, :effect_site, :intent_candidate, :message_send, :unresolved])
+        )
         |> Enum.sort_by(& &1.id)
 
       %{
@@ -19,9 +23,12 @@ defmodule BeamCompass.Analysis.Capsules do
         "trigger" => handler.object,
         "source_fact_id" => handler.id,
         "evidence_ids" => [handler.id | Enum.map(related, & &1.id)],
-        "effect_fact_ids" => Enum.filter(related, &(&1.kind == :effect_site)) |> Enum.map(& &1.id),
-        "intent_fact_ids" => Enum.filter(related, &(&1.kind == :intent_candidate)) |> Enum.map(& &1.id),
-        "unresolved_fact_ids" => Enum.filter(related, &(&1.kind == :unresolved)) |> Enum.map(& &1.id),
+        "effect_fact_ids" =>
+          Enum.filter(related, &(&1.kind == :effect_site)) |> Enum.map(& &1.id),
+        "intent_fact_ids" =>
+          Enum.filter(related, &(&1.kind == :intent_candidate)) |> Enum.map(& &1.id),
+        "unresolved_fact_ids" =>
+          Enum.filter(related, &(&1.kind == :unresolved)) |> Enum.map(& &1.id),
         "coverage" => "local_clause_only",
         "status" => "provisional"
       }

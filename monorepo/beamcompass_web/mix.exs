@@ -13,7 +13,8 @@ defmodule BeamCompassWeb.MixProject do
       homepage_url: "https://github.com/nshkrdotcom/beamcompass",
       package: package(),
       docs: docs(),
-      deps: deps()
+      deps: deps(),
+      dialyzer: [plt_add_apps: [:mix]]
     ]
   end
 

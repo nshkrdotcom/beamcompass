@@ -9,7 +9,7 @@
 
 # BeamCompass
 
-**Phase P01A source generation complete; Elixir runtime verification pending P01B.**
+**P01B local integration: source-only analysis and static HTML reporting.**
 
 BeamCompass is an Elixir/OTP behavioral architecture navigator. It constructs
 source-grounded facts, conservative effect and intent candidates, provisional
@@ -33,7 +33,7 @@ work and are not asserted by current output.
 
 There is intentionally **no root `mix.exs`** (Poncho layout).
 
-## Local validation (first task for local agent)
+## Local validation
 
 With Elixir >= 1.18 and an appropriate OTP version installed:
 
@@ -43,9 +43,10 @@ With Elixir >= 1.18 and an appropriate OTP version installed:
 ```
 
 `check.sh` runs `mix deps.get`, formatting, compilation with warnings-as-errors,
-ExUnit, strict Credo, and Dialyzer in each independent project. The commands
-have **not** been executed in the ChatGPT.com environment. The first local
-agent should fix any issues and update the separate implementation docset.
+ExUnit, strict Credo, and Dialyzer in each independent project. P01B local
+verification uses Elixir 1.20.4 and Erlang/OTP 29.1.2. The minimum declared
+Elixir 1.18 compatibility has not been independently tested. See the separate
+authoritative docset for exact command results and remaining scope.
 
 ## Core API
 
@@ -76,7 +77,7 @@ mix beamcompass.report ../../fixtures/ledger_sample --out /tmp/beamcompass.html
 The implementation docset is a **separate directory/repository** and should be
 extracted at:
 
-`~/p/g/n/brainstorms/shkrdotcom/docs/20261106/codebase_nav/impl_docs`
+`~/p/g/n/brainstorms/nshkrdotcom/docs/20261106/codebase_nav/impl_docs`
 
 Start there with `README.md`, `control/state.json`, and
 `control/NEXT_AGENT.md`. The docset carries the authoritative phase sequence,
@@ -88,7 +89,7 @@ acceptance criteria, approvals and handoff status. Keep it in sync with code.
 - This scanner is a conservative source probe, not a complete BEAM fact graph.
 - Source anchors identify start positions, not complete byte ranges.
 - The first HTML report is a static inspection artifact, not a Phoenix app.
-- No Elixir compilation, format, test, Credo or Dialyzer result is asserted yet.
+- P01B verifies the limited source-mode slice; full OTP analysis remains future work.
 - Dependency lockfiles are supplied for both Mix applications.
 
 ## Documentation and licensing

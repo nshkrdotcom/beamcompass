@@ -23,9 +23,16 @@ defmodule BeamCompass.Analysis.Projector do
   defp render(snapshot, lens, budget) do
     selected =
       case lens do
-        :behavior -> Enum.map(snapshot.capsules, &capsule_node/1)
-        :effects -> snapshot.facts |> Enum.filter(&(&1.kind in [:effect_site, :intent_candidate])) |> Enum.map(&fact_node/1)
-        :state -> snapshot.facts |> Enum.filter(&(&1.kind in [:role, :handler])) |> Enum.map(&fact_node/1)
+        :behavior ->
+          Enum.map(snapshot.capsules, &capsule_node/1)
+
+        :effects ->
+          snapshot.facts
+          |> Enum.filter(&(&1.kind in [:effect_site, :intent_candidate]))
+          |> Enum.map(&fact_node/1)
+
+        :state ->
+          snapshot.facts |> Enum.filter(&(&1.kind in [:role, :handler])) |> Enum.map(&fact_node/1)
       end
       |> Enum.sort_by(& &1["id"])
 
@@ -38,9 +45,20 @@ defmodule BeamCompass.Analysis.Projector do
       "lens" => Atom.to_string(lens),
       "nodes" => visible,
       "edges" => [],
-      "receipts" => [%{"kind" => "node_budget", "total" => length(selected), "visible" => length(visible), "omitted" => omitted}],
+      "receipts" => [
+        %{
+          "kind" => "node_budget",
+          "total" => length(selected),
+          "visible" => length(visible),
+          "omitted" => omitted
+        }
+      ],
       "unresolved_count" => Enum.count(snapshot.facts, &(&1.kind == :unresolved)),
-      "limitations" => ["local_clause_only", "unresolved_dispatch_visible_in_inventory", "not_a_complete_runtime_model"]
+      "limitations" => [
+        "local_clause_only",
+        "unresolved_dispatch_visible_in_inventory",
+        "not_a_complete_runtime_model"
+      ]
     }
   end
 
