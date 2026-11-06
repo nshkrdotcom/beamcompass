@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- Outer Hexagon Clip Path: 4px padding top and bottom -->
+    <clipPath id="webHexClip">
+      <polygon points="100,4 183.14,52 183.14,148 100,196 16.86,148 16.86,52" />
+    </clipPath>
+
+    <!-- Deep Holographic Cyber-Void Background -->
+    <radialGradient id="webBg" cx="100" cy="100" r="95" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0a1a38" />
+      <stop offset="45%" stop-color="#050e20" />
+      <stop offset="85%" stop-color="#02060f" />
+      <stop offset="100%" stop-color="#010206" />
+    </radialGradient>
+
+    <!-- Hexagon Outer Rim Gradient (Electric Cyan, Emerald, Neon Violet, Rose) -->
+    <linearGradient id="webRim" x1="16.86" y1="4" x2="183.14" y2="196" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00f5ff" />
+      <stop offset="32%" stop-color="#10b981" />
+      <stop offset="68%" stop-color="#6366f1" />
+      <stop offset="100%" stop-color="#ec4899" />
+    </linearGradient>
+
+    <!-- Holographic Projection Beam -->
+    <linearGradient id="holoBeam" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#00f5ff" stop-opacity="0.75" />
+      <stop offset="50%" stop-color="#10b981" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.05" />
+    </linearGradient>
+
+    <!-- Isometric Report Card Face Gradients -->
+    <linearGradient id="cardTop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#0284c7" stop-opacity="0.7" />
+    </linearGradient>
+
+    <linearGradient id="cardFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f766e" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#042f2e" stop-opacity="0.85" />
+    </linearGradient>
+
+    <linearGradient id="cardSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0e7490" />
+      <stop offset="100%" stop-color="#155e75" />
+    </linearGradient>
+
+    <!-- Concentric Sunburst / Hierarchy Ring Gradient -->
+    <linearGradient id="sunburstRing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="50%" stop-color="#06b6d4" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+
+    <!-- Center Display Core / Lens Radiance -->
+    <radialGradient id="displayCore" cx="100" cy="100" r="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="35%" stop-color="#67e8f9" />
+      <stop offset="70%" stop-color="#0891b2" />
+      <stop offset="100%" stop-color="#0c4a6e" />
+    </radialGradient>
+
+    <filter id="webGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3.2" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <filter id="softLaser" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4.5" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- CONTENT CLIPPED TO HEXAGON -->
+  <g clip-path="url(#webHexClip)">
+    <!-- Base Deep Cyber-Void -->
+    <polygon points="100,4 183.14,52 183.14,148 100,196 16.86,148 16.86,52" fill="url(#webBg)" />
+
+    <!-- Isometric Spherical Perspective Grid (Panoramic Viewport) -->
+    <g stroke="#0891b2" stroke-width="0.5" opacity="0.25">
+      <ellipse cx="100" cy="100" rx="80" ry="46" fill="none" />
+      <ellipse cx="100" cy="100" rx="64" ry="34" fill="none" />
+      <ellipse cx="100" cy="100" rx="46" ry="22" fill="none" />
+      <line x1="20" y1="100" x2="180" y2="100" />
+      <line x1="100" y1="20" x2="100" y2="180" />
+      <line x1="43" y1="67" x2="157" y2="133" stroke-dasharray="2,3" />
+      <line x1="43" y1="133" x2="157" y2="67" stroke-dasharray="2,3" />
+    </g>
+
+    <!-- Holographic Display Projection Cones (Emanating from bottom origin) -->
+    <polygon points="100,188 42,92 158,92" fill="url(#holoBeam)" opacity="0.45" filter="url(#softLaser)" />
+
+    <!-- Concentric Sunburst / OTP Hierarchy Rings (Process & Supervision Lens) -->
+    <g filter="url(#webGlow)">
+      <!-- Outer Hierarchy Ring with Sector Breaks -->
+      <circle cx="100" cy="96" r="68" fill="none" stroke="url(#sunburstRing)" stroke-width="1.2" stroke-dasharray="22,8,12,6,34,10" opacity="0.85" />
+      <!-- Middle Lens Ring -->
+      <circle cx="100" cy="96" r="52" fill="none" stroke="#00f5ff" stroke-width="1" stroke-dasharray="16,6,8,6" opacity="0.7" />
+      <!-- Inner Reticle Ring -->
+      <circle cx="100" cy="96" r="36" fill="none" stroke="#34d399" stroke-width="1.2" stroke-dasharray="6,4" opacity="0.75" />
+    </g>
+
+    <!-- Layered Isometric Interactive HTML Report Panels / Cards -->
+    <!-- Lower Background Panel (Diff / Comparison View) -->
+    <g filter="url(#webGlow)" opacity="0.75">
+      <polygon points="100,118 138,136 100,154 62,136" fill="#042f2e" stroke="#10b981" stroke-width="0.8" />
+      <line x1="78" y1="134" x2="122" y2="134" stroke="#34d399" stroke-width="0.8" opacity="0.6" />
+      <line x1="84" y1="140" x2="116" y2="140" stroke="#34d399" stroke-width="0.8" opacity="0.6" />
+    </g>
+
+    <!-- Middle Floating Inspection Card (Process / Effect Lens Card) -->
+    <g filter="url(#webGlow)">
+      <!-- Top Card Plane -->
+      <polygon points="100,74 146,96 100,118 54,96" fill="url(#cardTop)" stroke="#67e8f9" stroke-width="1" />
+      <!-- Front Bevel Edge -->
+      <polygon points="54,96 100,118 100,124 54,102" fill="url(#cardFront)" />
+      <!-- Right Bevel Edge -->
+      <polygon points="100,118 146,96 146,102 100,124" fill="url(#cardSide)" />
+
+      <!-- UI Inspection Elements on Floating Card (Simulated interactive graphs & bars) -->
+      <!-- Mini Chart Bars -->
+      <line x1="72" y1="92" x2="72" y2="99" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+      <line x1="80" y1="88" x2="80" y2="102" stroke="#67e8f9" stroke-width="2" stroke-linecap="round" />
+      <line x1="88" y1="84" x2="88" y2="104" stroke="#34d399" stroke-width="2" stroke-linecap="round" />
+      <line x1="96" y1="80" x2="96" y2="106" stroke="#f472b6" stroke-width="2" stroke-linecap="round" />
+      <line x1="104" y1="84" x2="104" y2="104" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" />
+      <line x1="112" y1="89" x2="112" y2="101" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" />
+      <line x1="120" y1="94" x2="120" y2="98" stroke="#ffffff" stroke-width="2" stroke-linecap="round" />
+    </g>
+
+    <!-- Upper Hologram Card (Detail Inspector Aperture) -->
+    <g filter="url(#webGlow)">
+      <polygon points="100,42 128,55 100,68 72,55" fill="#0f172a" stroke="#38bdf8" stroke-width="1.2" opacity="0.9" />
+      <circle cx="100" cy="55" r="4.5" fill="#00f5ff" filter="url(#webGlow)" />
+      <circle cx="100" cy="55" r="2" fill="#ffffff" />
+    </g>
+
+    <!-- Optical Ray Conduits Connecting Report Cards -->
+    <g stroke="#ffffff" stroke-width="0.8" opacity="0.6">
+      <line x1="100" y1="55" x2="100" y2="74" stroke-dasharray="2,2" />
+      <line x1="72" y1="55" x2="54" y2="96" stroke-dasharray="3,3" />
+      <line x1="128" y1="55" x2="146" y2="96" stroke-dasharray="3,3" />
+      <line x1="100" y1="124" x2="100" y2="140" stroke-dasharray="2,2" />
+    </g>
+
+    <!-- Inspection Reticle Brackets / Viewport Corners -->
+    <g stroke="#00f5ff" stroke-width="1.2" fill="none" opacity="0.85">
+      <!-- Top-Left Bracket -->
+      <path d="M 44,48 L 38,48 L 38,56" />
+      <!-- Top-Right Bracket -->
+      <path d="M 156,48 L 162,48 L 162,56" />
+      <!-- Bottom-Right Bracket -->
+      <path d="M 162,144 L 162,152 L 156,152" />
+      <!-- Bottom-Left Bracket -->
+      <path d="M 38,144 L 38,152 L 44,152" />
+    </g>
+
+    <!-- Telemetry Status Nodes (Process, Channel, Event Counts) -->
+    <circle cx="38" cy="100" r="3.2" fill="#10b981" stroke="#ffffff" stroke-width="0.8" filter="url(#webGlow)" />
+    <circle cx="162" cy="100" r="3.2" fill="#06b6d4" stroke="#ffffff" stroke-width="0.8" filter="url(#webGlow)" />
+    <circle cx="100" cy="28" r="3.5" fill="#f43f5e" stroke="#ffffff" stroke-width="0.8" filter="url(#webGlow)" />
+    <circle cx="100" cy="172" r="3" fill="#a855f7" stroke="#ffffff" stroke-width="0.8" filter="url(#webGlow)" />
+
+    <!-- Horizontal Laser Telemetry Scan Line Across Viewport -->
+    <ellipse cx="100" cy="96" rx="66" ry="1.5" fill="#ffffff" opacity="0.8" filter="url(#softLaser)" />
+
+    <!-- Polished Inner Bezel Guideline -->
+    <polygon points="100,7 180.54,53.5 180.54,146.5 100,193 19.46,146.5 19.46,53.5"
+             fill="none" stroke="#10b981" stroke-width="0.75" stroke-dasharray="14, 4" stroke-opacity="0.5" />
+
+    <!-- Master Outer Hexagon Structural Rim -->
+    <polygon points="100,4 183.14,52 183.14,148 100,196 16.86,148 16.86,52"
+             fill="none" stroke="url(#webRim)" stroke-width="2.6" stroke-linejoin="round" />
+
+    <!-- Precision Corner Vertex Hardware Fasteners -->
+    <g fill="#050e20" stroke="#00f5ff" stroke-width="1.2">
+      <circle cx="100" cy="4" r="2.8" stroke="#00f5ff" fill="#00f5ff" />
+      <circle cx="183.14" cy="52" r="2.5" stroke="#10b981" />
+      <circle cx="183.14" cy="148" r="2.5" stroke="#6366f1" />
+      <circle cx="100" cy="196" r="2.8" stroke="#ec4899" fill="#ec4899" />
+      <circle cx="16.86" cy="148" r="2.5" stroke="#6366f1" />
+      <circle cx="16.86" cy="52" r="2.5" stroke="#10b981" />
+    </g>
+  </g>
+</svg>

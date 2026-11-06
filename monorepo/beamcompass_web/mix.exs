@@ -41,7 +41,7 @@ defmodule BeamCompassWeb.MixProject do
   defp docs do
     [
       main: "readme",
-      logo: "assets/beamcompass.svg",
+      logo: "assets/beamcompass_web.svg",
       assets: %{"assets" => "assets"},
       source_ref: "main",
       source_url_pattern:

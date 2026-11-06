@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/beamcompass.svg" alt="BeamCompass" width="200" />
+  <img src="assets/beamcompass_core.svg" alt="BeamCompass Core" width="200" />
 </p>
 
 <p align="center">
