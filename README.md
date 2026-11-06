@@ -9,7 +9,7 @@
 
 # BeamCompass
 
-**P01B local integration: source-only analysis and static HTML reporting.**
+**P01B verified baseline; P02A typed v2 source implementation awaiting local P02B checks.**
 
 BeamCompass is an Elixir/OTP behavioral architecture navigator. It constructs
 source-grounded facts, conservative effect and intent candidates, provisional
@@ -71,6 +71,40 @@ Inside `monorepo/beamcompass_web`:
 ```sh
 mix beamcompass.report ../../fixtures/ledger_sample --out /tmp/beamcompass.html
 ```
+
+
+## P02A typed source-only export (source authored; local verification pending)
+
+P02A adds a separate v2 envelope, keeping the default v1 scanner, snapshot
+format, save/load calls, and web report unchanged. Example, from
+`monorepo/beamcompass_core`:
+
+```sh
+mix beamcompass.export ../../fixtures/ledger_sample --schema 2 \
+  --project-id fixture:ledger --out /tmp/beamcompass-v2.json \
+  --manifest /tmp/beamcompass-v2.inputs.json
+```
+
+```elixir
+{:ok, snapshot_v2} = BeamCompass.export_source("../../fixtures/ledger_sample", project_id: "fixture:ledger")
+entity = hd(snapshot_v2["entities"])
+{:ok, exact_ref} = BeamCompass.source_reference(snapshot_v2, "entity", entity["id"])
+{:ok, ^entity} = BeamCompass.resolve_source_reference(snapshot_v2, exact_ref)
+BeamCompass.save_source(snapshot_v2, "/tmp/beamcompass-v2.json")
+```
+
+The namespace must be persistent and supplied by the caller. Only **source**
+evidence and schema **2** are accepted. The snapshot hash and exact object refs
+are version-scoped, not semantic identity across revisions. Source evidence
+records producer version, file hash, start line/column and derivation inputs.
+End coordinates are null when unverified. `performs_effect` only resolves to
+a *syntactic effect call site*, not proof of runtime execution; intent tuples
+remain unresolved as to performer. Aliased/external calls may remain unknown.
+All target code, Mix scripts, macros and on_load remain unexecuted by the scan.
+
+This source implementation and its tests are **not yet runtime verified**:
+Elixir/Mix were unavailable for P02A; local P02B must run and fix both Mix app
+gates, the fresh-process export/consumer driver and source-safety acceptance.
 
 ## Separate authoritative docset
 

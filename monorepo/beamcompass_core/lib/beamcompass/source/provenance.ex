@@ -1,0 +1,77 @@
+defmodule BeamCompass.Source.Provenance do
+  @moduledoc "Fresh, nonexecuting source bytes/parser context for v2. Never reconstructed from a v1 snapshot."
+
+  alias BeamCompass.Json
+  alias BeamCompass.Source.Discovery
+  alias BeamCompass.Source.Providers.Quoted
+
+  @settings %{
+    "adapter" => "beamcompass-elixir-quoted-ast-v1",
+    "columns" => true,
+    "file_globs" => ["lib/**/*.ex", "lib/**/*.exs"],
+    "layouts" => ["immediate-poncho", "monorepo-poncho", "standalone"],
+    "mode" => "source",
+    "parser" => "Code.string_to_quoted/2"
+  }
+
+  @spec scan(String.t()) :: {:ok, map()} | {:error, term()}
+  def scan(path) when is_binary(path) do
+    with {:ok, projects} <- Discovery.discover(path),
+         {:ok, sources} <- read_sources(projects) do
+      inputs = Enum.map(sources, &%{"path" => &1.path, "sha256" => &1.sha256})
+
+      {:ok,
+       %{
+         projects: projects,
+         sources: Enum.map(sources, &parse_source/1),
+         inputs: inputs,
+         settings: @settings,
+         source_digest: sha256(Json.encode(inputs)),
+         config_digest: sha256(Json.encode(@settings)),
+         toolchain: %{
+           "elixir" => System.version(),
+           "otp" => to_string(:erlang.system_info(:otp_release))
+         }
+       }}
+    end
+  end
+
+  defp read_sources(projects) do
+    projects
+    |> Enum.flat_map(fn project ->
+      Enum.map(project.paths, fn {absolute, relative} ->
+        {absolute, relative, project.path}
+      end)
+    end)
+    |> Enum.sort_by(fn {_absolute, relative, _project} -> relative end)
+    |> Enum.reduce_while({:ok, []}, fn {absolute, relative, project}, {:ok, acc} ->
+      case File.read(absolute) do
+        {:ok, bytes} ->
+          item = %{path: relative, project: project, sha256: sha256(bytes), bytes: bytes}
+          {:cont, {:ok, [item | acc]}}
+
+        {:error, reason} ->
+          {:halt, {:error, {:source_read_failed, relative, reason}}}
+      end
+    end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      other -> other
+    end
+  end
+
+  defp parse_source(source) do
+    case Quoted.scan(source.bytes, source.path) do
+      {:ok, facts} -> Map.merge(Map.delete(source, :bytes), %{facts: facts, issue: nil})
+      {:error, reason} ->
+        Map.merge(Map.delete(source, :bytes), %{facts: [], issue: reason})
+    end
+  end
+
+  @spec sha256(binary()) :: String.t()
+  def sha256(binary) do
+    binary
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+  end
+end

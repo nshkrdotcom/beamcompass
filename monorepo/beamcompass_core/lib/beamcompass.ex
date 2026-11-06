@@ -6,6 +6,8 @@ defmodule BeamCompass do
   """
 
   alias BeamCompass.Analysis.{Capsules, Diff, Projector}
+  alias BeamCompass.Behavior.{Export, Validator}
+  alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id
   alias BeamCompass.Model.{Snapshot, Store}
   alias BeamCompass.Source.{Discovery, Scanner}
@@ -55,6 +57,61 @@ defmodule BeamCompass do
       {:error, reason} -> {[], [%{"path" => relative, "reason" => reason}], identity}
     end
   end
+
+  @doc """
+  Fresh, source-only typed v2 export. Requires a caller-owned persistent namespace.
+
+  The v1 scan/save/load contracts do not change. This function does **not** take
+  a v1 snapshot or synthesize missing provenance from serialized facts.
+  Modes other than `:source` and versions other than `2` are refused.
+  """
+  @spec export_source(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def export_source(path, options \\ [])
+
+  def export_source(path, options) when is_binary(path) and is_list(options) do
+    if Keyword.keyword?(options) do
+      namespace = Keyword.get(options, :project_id)
+      schema = Keyword.get(options, :schema, 2)
+      mode = Keyword.get(options, :mode, :source)
+
+      cond do
+        not is_binary(namespace) or String.trim(namespace) == "" ->
+          {:error, :project_id_required}
+
+        (Keyword.keys(options) -- [:project_id, :schema, :mode]) != [] ->
+          {:error, :unsupported_export_option}
+
+        schema != 2 ->
+          {:error, :unsupported_snapshot_version}
+
+        mode != :source ->
+          {:error, :unsupported_evidence_mode}
+
+        true ->
+          case Export.scan(path, namespace) do
+            {:ok, %{snapshot: snapshot}} -> {:ok, snapshot}
+            error -> error
+          end
+      end
+    else
+      {:error, :invalid_export_options}
+    end
+  end
+
+  def export_source(%Snapshot{}, _options), do: {:error, :missing_provenance}
+  def export_source(_, _), do: {:error, :invalid_source_path}
+
+  @doc "Generate a portable exact reference to a v2 entity, relation or evidence record."
+  @spec source_reference(map(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def source_reference(snapshot, kind, id), do: Validator.reference(snapshot, kind, id)
+
+  @doc "Validate an exact v2 reference without joining on labels or semantic keys."
+  @spec resolve_source_reference(map(), map()) :: {:ok, map()} | {:error, term()}
+  def resolve_source_reference(snapshot, reference), do: Validator.validate_reference(snapshot, reference)
+
+  @doc "Atomically persist a validated v2 export. `save/2` remains the v1 writer."
+  @spec save_source(map(), String.t()) :: :ok | {:error, term()}
+  def save_source(snapshot, path), do: SourceStore.write(snapshot, path)
 
   @spec inventory(Snapshot.t()) :: map()
   def inventory(%Snapshot{} = snapshot) do

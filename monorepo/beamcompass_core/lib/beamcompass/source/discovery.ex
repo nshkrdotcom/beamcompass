@@ -1,5 +1,5 @@
 defmodule BeamCompass.Source.Discovery do
-  @moduledoc "Discovers standalone and Poncho Mix projects without evaluating mix.exs."
+  @moduledoc "Discovers standalone, Poncho and monorepo Poncho Mix projects without evaluating mix.exs."
 
   @spec discover(String.t()) :: {:ok, list(map())} | {:error, String.t()}
   def discover(path) do
@@ -9,16 +9,21 @@ defmodule BeamCompass.Source.Discovery do
       not File.dir?(root) ->
         {:error, "directory does not exist: #{root}"}
 
+      symlink?(root) ->
+        {:error, "workspace root must not be a symlink"}
+
       File.regular?(Path.join(root, "mix.exs")) ->
         {:ok, [project(root, root)]}
 
       true ->
+        # Only two documented depths. No recursive traversal of arbitrary apps,
+        # and no evaluation or expansion of a discovered mix.exs.
         roots =
-          root
-          |> Path.join("*/mix.exs")
-          |> Path.wildcard()
+          ["*/mix.exs", "monorepo/*/mix.exs"]
+          |> Enum.flat_map(&Path.wildcard(Path.join(root, &1)))
           |> Enum.map(&Path.dirname/1)
-          |> Enum.reject(&symlink?/1)
+          |> Enum.reject(&symlink_path?(&1, root))
+          |> Enum.uniq()
           |> Enum.sort()
 
         case roots do
@@ -31,9 +36,9 @@ defmodule BeamCompass.Source.Discovery do
   defp project(project_root, workspace_root) do
     paths =
       ["lib/**/*.ex", "lib/**/*.exs"]
-      |> Enum.flat_map(fn glob -> Path.wildcard(Path.join(project_root, glob)) end)
+      |> Enum.flat_map(&Path.wildcard(Path.join(project_root, &1)))
       |> Enum.uniq()
-      |> Enum.filter(&(File.regular?(&1) and not symlink?(&1)))
+      |> Enum.filter(&(File.regular?(&1) and not symlink_path?(&1, workspace_root)))
       |> Enum.sort()
 
     %{
@@ -41,6 +46,18 @@ defmodule BeamCompass.Source.Discovery do
       path: Path.relative_to(project_root, workspace_root),
       paths: Enum.map(paths, &{&1, Path.relative_to(&1, workspace_root)})
     }
+  end
+
+  defp symlink_path?(path, root) do
+    relative = Path.relative_to(path, root)
+
+    relative
+    |> Path.split()
+    |> Enum.reduce({root, false}, fn part, {prefix, found?} ->
+      next = Path.join(prefix, part)
+      {next, found? or symlink?(next)}
+    end)
+    |> elem(1)
   end
 
   defp symlink?(path) do
