@@ -14,7 +14,7 @@ defmodule BeamCompass do
     SourceProjection
   }
 
-  alias BeamCompass.Behavior.{Export, Validator}
+  alias BeamCompass.Behavior.{Archive, Export, Validator}
   alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id
   alias BeamCompass.Model.{Snapshot, Store}
@@ -129,6 +129,37 @@ defmodule BeamCompass do
   @doc "Atomically persist a validated v2 export. `save/2` remains the v1 writer."
   @spec save_source(map(), String.t()) :: :ok | {:error, term()}
   def save_source(snapshot, path), do: SourceStore.write(snapshot, path)
+
+  @doc "Export a Git-pinned, byte-verified source-only v2 snapshot."
+  @spec export_source_git(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def export_source_git(path, project_id) do
+    with {:ok, %{snapshot: snapshot}} <- Export.scan_git(path, project_id) do
+      {:ok, snapshot}
+    end
+  end
+
+  @doc "Atomically persist a fresh v2 scan with exact source-input identities."
+  @spec archive_source(String.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def archive_source(source_root, project_id, archive_root) do
+    with {:ok, %{snapshot: snapshot, inputs: inputs}} <- Export.scan(source_root, project_id) do
+      Archive.put(snapshot, inputs, archive_root)
+    end
+  end
+
+  @doc "Load a validated immutable v2 bundle by digest and rehydrate its snapshot."
+  @spec load_source_archive(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def load_source_archive(archive_root, id), do: Archive.get(archive_root, id)
+
+  @doc "Typed, evidence-backed source-only changes between exact v2 snapshots."
+  @spec compare_source(map(), map()) :: {:ok, map()} | {:error, term()}
+  def compare_source(before, after), do: BeamCompass.Analysis.ChangeSet.compare(before, after)
+
+  @doc "Plan source-hash and dependent-analysis invalidation without executing target source."
+  @spec invalidate_source(map(), list(map()), list(map()), list(map()), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def invalidate_source(snapshot, previous_inputs, next_inputs, analyses, options \\ []) do
+    BeamCompass.Analysis.Invalidation.plan(snapshot, previous_inputs, next_inputs, analyses, options)
+  end
 
   @doc "Versioned typed preservation request for the source-only v2 export."
   @spec projection_request(map(), keyword()) :: {:ok, map()} | {:error, term()}

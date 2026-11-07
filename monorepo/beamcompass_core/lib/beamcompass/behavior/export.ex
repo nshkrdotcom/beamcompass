@@ -108,6 +108,57 @@ defmodule BeamCompass.Behavior.Export do
     end
   end
 
+  @doc """
+  Export a clean, pinned Git source revision without executing target code.
+  Git reads only object bytes. Every scanned Elixir path must exactly match the
+  given HEAD commit; uncommitted or untracked source changes are refused.
+  """
+  @spec scan_git(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  def scan_git(path, project_id) when is_binary(path) and is_binary(project_id) do
+    with {:ok, scanned} <- scan(path, project_id),
+         {:ok, head} <- git(path, ["rev-parse", "--verify", "HEAD^{commit}"]),
+         true <- Regex.match?(~r/\A[0-9a-f]{40}\z/, String.trim(head)),
+         {:ok, top} <- git(path, ["rev-parse", "--show-toplevel"]),
+         true <- Path.expand(path) == String.trim(top),
+         :ok <- verify_git_blobs(path, String.trim(head), scanned.inputs) do
+      manifest = Map.put(scanned.snapshot["manifest"], "source_revision", String.trim(head))
+      body = scanned.snapshot |> Map.put("manifest", manifest) |> Map.delete("snapshot_id")
+      snapshot = Map.put(body, "snapshot_id", Provenance.sha256(Json.encode(body)))
+
+      with :ok <- Validator.validate(snapshot) do
+        {:ok, %{scanned | snapshot: snapshot}}
+      end
+    else
+      false -> {:error, :unverified_git_revision}
+      error -> error
+    end
+  end
+
+  def scan_git(_, _), do: {:error, :invalid_source_path}
+
+  defp verify_git_blobs(path, head, inputs) do
+    Enum.reduce_while(inputs, :ok, fn input, _ ->
+      case git(path, ["show", "#{head}:#{input["path"]}"]) do
+        {:ok, bytes} ->
+          if Provenance.sha256(bytes) == input["sha256"] do
+            {:cont, :ok}
+          else
+            {:halt, {:error, :uncommitted_source_bytes}}
+          end
+        _ -> {:halt, {:error, :source_not_in_pinned_git_revision}}
+      end
+    end)
+  end
+
+  defp git(root, args) do
+    case System.cmd("git", ["-C", root | args], stderr_to_stdout: true) do
+      {output, 0} -> {:ok, output}
+      {_output, _code} -> {:error, :git_revision_unavailable}
+    end
+  rescue
+    ErlangError -> {:error, :git_revision_unavailable}
+  end
+
   defp entry(fact, source) do
     evidence = %Evidence{
       id:
@@ -130,7 +181,7 @@ defmodule BeamCompass.Behavior.Export do
         "end_line" => nil,
         "end_column" => nil
       },
-      basis: "nonexecuting quoted AST: #{fact.kind} syntactic occurrence",
+      basis: syntax_witness(fact),
       input_evidence_ids: []
     }
 
@@ -141,6 +192,25 @@ defmodule BeamCompass.Behavior.Export do
       evidence: evidence,
       entity: entity_for(fact, source.project, evidence.id)
     }
+  end
+
+  # A bounded normalized source-line witness distinguishes a changed state
+  # expression from a pure line shift. It is inert text, not interpreted AST
+  # behavior. Existing v1 scans and serialized bytes are unaffected.
+  defp syntax_witness(fact) do
+    category = entity_kind(fact)
+    prefix = "nonexecuting quoted AST: #{fact.kind} syntactic occurrence"
+
+    if category in ["transition", "effect_intent", "effect", "failure_boundary", "decision"] do
+      snippet =
+        fact.anchor["snippet"]
+        |> String.replace(~r/\s+/u, " ")
+        |> String.trim()
+
+      prefix <> "; source-line witness: " <> snippet
+    else
+      prefix
+    end
   end
 
   defp entity_for(fact, project, evidence_id) do
