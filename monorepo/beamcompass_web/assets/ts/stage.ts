@@ -293,7 +293,7 @@ export function mountStage(host: HTMLElement): () => void {
   return () => { for (const cleanup of cleanups) cleanup(); };
 }
 
-/** Static report/independent-consumer fallback (no Phoenix JS or Grand). */
+/** Standalone source stage without Phoenix. */
 export function bootStandalone(root: ParentNode = document): void {
   const host = root.querySelector<HTMLElement>('#semantic-stage');
   if (host && !host.dataset.liveManaged) mountStage(host);

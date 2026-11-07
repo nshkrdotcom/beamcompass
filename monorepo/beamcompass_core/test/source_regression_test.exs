@@ -1,11 +1,16 @@
-defmodule BeamCompass.P03BRegressionTest do
+defmodule BeamCompass.SourceRegressionTest do
   use ExUnit.Case, async: true
 
   alias BeamCompass.Analysis.CausalCapsules
   alias BeamCompass.Source.CausalHints
 
   setup do
-    root = Path.join(System.tmp_dir!(), "beamcompass_p03b_#{System.unique_integer([:positive])}")
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "beamcompass_source_regression_#{System.unique_integer([:positive])}"
+      )
+
     File.mkdir_p!(Path.join(root, "lib"))
     File.write!(Path.join(root, "mix.exs"), "raise \"target Mix must stay inert\"")
     on_exit(fn -> File.rm_rf!(root) end)
@@ -72,7 +77,7 @@ defmodule BeamCompass.P03BRegressionTest do
     end
 
     server = File.read!(Path.join(root, "lib/server.ex"))
-    {:ok, original} = BeamCompass.export_source(root, project_id: "p03b:flow")
+    {:ok, original} = BeamCompass.export_source(root, project_id: "source_regression:flow")
     assert intent_links(original) != []
 
     for changed <- [
@@ -83,7 +88,7 @@ defmodule BeamCompass.P03BRegressionTest do
           String.replace(server, "{:run_effects, effects}, state", "{:wrong_tag, effects}, state")
         ] do
       File.write!(Path.join(root, "lib/server.ex"), changed)
-      {:ok, snapshot} = BeamCompass.export_source(root, project_id: "p03b:flow")
+      {:ok, snapshot} = BeamCompass.export_source(root, project_id: "source_regression:flow")
       assert intent_links(snapshot) == []
     end
   end
@@ -144,7 +149,7 @@ defmodule BeamCompass.P03BRegressionTest do
 
   defp export(root, source) do
     File.write!(Path.join(root, "lib/example.ex"), source)
-    {:ok, snapshot} = BeamCompass.export_source(root, project_id: "p03b:regression")
+    {:ok, snapshot} = BeamCompass.export_source(root, project_id: "source_regression:regression")
     snapshot
   end
 

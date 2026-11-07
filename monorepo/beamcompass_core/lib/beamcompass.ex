@@ -23,7 +23,6 @@ defmodule BeamCompass do
   alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id
   alias BeamCompass.Model.{Snapshot, Store}
-  alias BeamCompass.Release.Policy
   alias BeamCompass.Source.{Discovery, Safety, Scanner}
 
   @spec scan(String.t()) :: {:ok, Snapshot.t()} | {:error, term()}
@@ -214,11 +213,6 @@ defmodule BeamCompass do
   @doc "Rehydrate an exact legacy or v2 payload from a loss-accounted wrapper."
   @spec rehydrate_compatibility(map()) :: {:ok, Snapshot.t() | map()} | {:error, term()}
   def rehydrate_compatibility(envelope), do: Migration.rehydrate(envelope)
-
-  @doc "Fail-closed release eligibility using observed measurements and owner budgets."
-  @spec release_eligibility(map(), map() | nil, list(map())) :: {:ok, map()} | {:error, map()}
-  def release_eligibility(measured, approval, findings),
-    do: Policy.evaluate(measured, approval, findings)
 
   @spec inventory(Snapshot.t()) :: map()
   def inventory(%Snapshot{} = snapshot) do

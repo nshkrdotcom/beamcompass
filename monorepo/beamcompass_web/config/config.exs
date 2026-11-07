@@ -9,6 +9,6 @@ config :beamcompass_web, BeamCompassWeb.Endpoint,
   secret_key_base: String.duplicate("0", 64),
   server: false,
   pubsub_server: BeamCompassWeb.PubSub,
-  live_view: [signing_salt: "P05nav0005"]
+  live_view: [signing_salt: "navigator-session"]
 
 config :phoenix, :json_library, JSON

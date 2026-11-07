@@ -11,7 +11,7 @@ defmodule BeamCompass.Source.Provenance do
     "file_globs" => ["lib/**/*.ex", "lib/**/*.exs"],
     "layouts" => ["immediate-poncho", "monorepo-poncho", "standalone"],
     "mode" => "source",
-    "semantic_hints" => "p03a-source-boundaries-and-candidate-flow-v2",
+    "semantic_hints" => "source-boundaries-and-candidate-flow-v2",
     "parser" => "Code.string_to_quoted/2"
   }
 

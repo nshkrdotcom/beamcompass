@@ -2,7 +2,7 @@ defmodule BeamCompassWeb.Endpoint do
   @moduledoc "Loopback-first Phoenix/LiveView endpoint consuming only validated source artifacts."
   use Phoenix.Endpoint, otp_app: :beamcompass_web
 
-  @session_options [store: :cookie, key: "_beamcompass_session", signing_salt: "bc-p05-navigator"]
+  @session_options [store: :cookie, key: "_beamcompass_session", signing_salt: "bc-navigator"]
 
   socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
 

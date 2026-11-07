@@ -31,7 +31,6 @@ defmodule BeamCompassWeb.MixProject do
         "mix.exs",
         ".formatter.exs",
         "README.md",
-        "CHANGELOG.md",
         "LICENSE",
         "assets/js/*",
         "assets/ts/*",
@@ -54,12 +53,11 @@ defmodule BeamCompassWeb.MixProject do
         "https://github.com/nshkrdotcom/beamcompass/blob/main/monorepo/beamcompass_web/%{path}#L%{line}",
       extras: [
         {"README.md", [title: "Overview"]},
-        {"CHANGELOG.md", [title: "Changelog"]},
         {"LICENSE", [title: "License"]}
       ],
       groups_for_extras: [
         {"Getting started", ["README.md"]},
-        {"Project", ["CHANGELOG.md", "LICENSE"]}
+        {"Project", ["LICENSE"]}
       ],
       groups_for_modules: [
         {"Reports",

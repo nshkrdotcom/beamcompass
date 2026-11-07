@@ -7,7 +7,7 @@ defmodule BeamCompass.NavigatorTest do
   @fixture Path.expand("../../../fixtures/ledger_sample", __DIR__)
 
   setup_all do
-    assert {:ok, %{snapshot: snapshot}} = Export.scan(@fixture, "test:p05:source")
+    assert {:ok, %{snapshot: snapshot}} = Export.scan(@fixture, "test:navigator:source")
     assert :ok = Validator.validate(snapshot)
     entity = hd(snapshot["entities"])
     evidence = hd(entity["evidence_ids"])
@@ -33,7 +33,7 @@ defmodule BeamCompass.NavigatorTest do
 
   test "core navigator refuses unsupported lenses and injected query keys", %{snapshot: snapshot} do
     assert {:error, :unsupported_navigation_lens} =
-             Navigator.view(snapshot, %{"lens" => "grand_approval"})
+             Navigator.view(snapshot, %{"lens" => "unsupported_lens"})
 
     assert {:error, :unsupported_navigation_field} =
              Navigator.view(snapshot, %{"approve" => "true"})

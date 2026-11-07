@@ -30,7 +30,7 @@ defmodule BeamCompass.Analysis.CausalCapsules do
       link_ids = ids(state.links)
 
       %{
-        "id" => "capsule:" <> Id.for_parts(["p03", snapshot["snapshot_id"], trigger["id"]]),
+        "id" => "capsule:" <> Id.for_parts(["capsule", snapshot["snapshot_id"], trigger["id"]]),
         "trigger_id" => trigger["id"],
         "entity_ids" => node_ids,
         "relation_ids" => link_ids,

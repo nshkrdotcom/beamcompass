@@ -10,7 +10,7 @@ defmodule BeamCompassWeb.NavigatorLiveTest do
   @fixture Path.expand("../../../fixtures/ledger_sample", __DIR__)
 
   setup do
-    assert {:ok, %{snapshot: snapshot}} = Export.scan(@fixture, "test:p05:live")
+    assert {:ok, %{snapshot: snapshot}} = Export.scan(@fixture, "test:navigator:live")
     path = Path.join(System.tmp_dir!(), "bc_live_#{System.unique_integer([:positive])}.json")
     assert :ok = Store.write(snapshot, path)
     previous = Application.get_env(:beamcompass_web, :navigator_snapshot_path)

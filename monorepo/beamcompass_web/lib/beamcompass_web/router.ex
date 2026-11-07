@@ -1,5 +1,5 @@
 defmodule BeamCompassWeb.Router do
-  @moduledoc "Standalone navigator only; no Grand routes or assurance policy."
+  @moduledoc "Routes for the source navigator."
   use Phoenix.Router
 
   import Plug.Conn

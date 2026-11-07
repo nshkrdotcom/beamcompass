@@ -6,7 +6,10 @@ defmodule BeamCompass.SemanticDepthTest do
 
   setup do
     root =
-      Path.join(System.tmp_dir!(), "beamcompass_p03_depth_#{System.unique_integer([:positive])}")
+      Path.join(
+        System.tmp_dir!(),
+        "beamcompass_projection_depth_#{System.unique_integer([:positive])}"
+      )
 
     File.mkdir_p!(root)
     on_exit(fn -> File.rm_rf!(root) end)
@@ -85,7 +88,7 @@ defmodule BeamCompass.SemanticDepthTest do
            end)
 
     # Wrong variable: send updated state rather than emitted effects. A tag
-    # match alone is not proof of a reducer/interpreter handoff.
+    # match alone is not proof of a reducer/interpreter data transfer.
     File.write!(
       Path.join(root, "lib/server.ex"),
       String.replace(source, "{:run_effects, effects}", "{:run_effects, updated}", global: false)

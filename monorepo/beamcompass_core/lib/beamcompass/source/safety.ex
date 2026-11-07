@@ -1,7 +1,6 @@
 defmodule BeamCompass.Source.Safety do
   @moduledoc """
-  Defensive ceilings for nonexecuting source inspection. These are technical input
-  guards, NOT owner-approved throughput or recovery SLOs. The target is never
+  Defensive ceilings for nonexecuting source inspection. The target is never
   loaded, expanded, compiled, or evaluated. Parsing occurs in a monitored BEAM
   worker with a bounded heap and wall-clock timeout. This is not an OS sandbox.
   """

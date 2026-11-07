@@ -6,7 +6,9 @@ defmodule BeamCompass.SourceProjectionTest do
   alias BeamCompass.Model.Codec
 
   setup do
-    root = Path.join(System.tmp_dir!(), "beamcompass_p03_#{System.unique_integer([:positive])}")
+    root =
+      Path.join(System.tmp_dir!(), "beamcompass_projection_#{System.unique_integer([:positive])}")
+
     File.mkdir_p!(root)
     on_exit(fn -> File.rm_rf!(root) end)
     {:ok, root: root}
@@ -217,7 +219,7 @@ defmodule BeamCompass.SourceProjectionTest do
     for {field, value, expected} <- [
           {"schema_version", 2, :unsupported_projection_version},
           {"snapshot_schema_version", 3, :unsupported_snapshot_version},
-          {"lens", "grand", :unsupported_projection_lens},
+          {"lens", "unsupported_lens", :unsupported_projection_lens},
           {"budget", 0, :invalid_projection_budget},
           {"budget", 999, :invalid_projection_budget},
           {"project_id", "wrong", :wrong_projection_namespace},
@@ -234,7 +236,7 @@ defmodule BeamCompass.SourceProjectionTest do
              BeamCompass.projection_request(snapshot, boundaries: [:proof_result])
 
     assert {:error, :invalid_projection_options} =
-             BeamCompass.projection_request(snapshot, grand: :yes)
+             BeamCompass.projection_request(snapshot, unsupported_option: :yes)
 
     assert {:error, :invalid_projection_preserve} =
              BeamCompass.projection_request(snapshot, preserve: ["not_a_reference"])
