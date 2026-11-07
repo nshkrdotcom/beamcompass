@@ -35,7 +35,9 @@ defmodule BeamCompass.Analysis.Invalidation do
       {entities, relations} = dependent_graph_closure(snapshot, ids, entities, relations, global)
 
       seed =
-        MapSet.new(affected_evidence ++ entities ++ relations ++ Enum.map(changed, &("path:" <> &1)))
+        MapSet.new(
+          affected_evidence ++ entities ++ relations ++ Enum.map(changed, &("path:" <> &1))
+        )
 
       # A same-path byte change invalidates its own transitive dependencies;
       # only true global changes invalidate unrelated snapshot-wide caches.
@@ -117,7 +119,9 @@ defmodule BeamCompass.Analysis.Invalidation do
 
   defp affected_entities(entities, changed, global) do
     entities
-    |> Enum.filter(&(global or Enum.any?(&1["evidence_ids"], &MapSet.member?(changed, &1))))
+    |> Enum.filter(fn entity ->
+      global or Enum.any?(entity["evidence_ids"], &MapSet.member?(changed, &1))
+    end)
     |> Enum.map(& &1["id"])
     |> Enum.sort()
   end
@@ -178,17 +182,10 @@ defmodule BeamCompass.Analysis.Invalidation do
   end
 
   defp check_next_inputs(inputs) when is_list(inputs) do
-    if inputs != [] and Enum.all?(inputs, fn input ->
-         is_map(input) and Enum.sort(Map.keys(input)) == ~w(path sha256) and
-           is_binary(input["path"]) and input["path"] != "" and
-           not String.starts_with?(input["path"], "/") and
-           not String.contains?(input["path"], ["\\", ":", <<0>>]) and
-           Enum.all?(String.split(input["path"], "/"), &(&1 not in ["", ".", ".."])) and
-           is_binary(input["sha256"]) and
-           Regex.match?(~r/\A[0-9a-f]{64}\z/, input["sha256"])
-       end) and
-         (Enum.map(inputs, & &1["path"]) ==
-            (Enum.map(inputs, & &1["path"]) |> Enum.uniq() |> Enum.sort())) do
+    if inputs != [] and
+         Enum.all?(inputs, &valid_next_input?/1) and
+         Enum.map(inputs, & &1["path"]) ==
+           Enum.map(inputs, & &1["path"]) |> Enum.uniq() |> Enum.sort() do
       :ok
     else
       {:error, :invalid_next_inputs}
@@ -213,7 +210,10 @@ defmodule BeamCompass.Analysis.Invalidation do
   defp check_analyses(snapshot, inputs, analyses) when is_list(analyses) do
     objects =
       MapSet.new(
-        Enum.map(snapshot["entities"] ++ snapshot["relations"] ++ snapshot["evidence"], & &1["id"]) ++
+        Enum.map(
+          snapshot["entities"] ++ snapshot["relations"] ++ snapshot["evidence"],
+          & &1["id"]
+        ) ++
           Enum.map(inputs, &("path:" <> &1["path"])) ++ ["snapshot:*"]
       )
 
@@ -222,14 +222,7 @@ defmodule BeamCompass.Analysis.Invalidation do
       allowed = Enum.reduce(ids, objects, &MapSet.put(&2, &1))
 
       if Enum.all?(ids, &is_binary/1) and ids == Enum.sort(Enum.uniq(ids)) and
-           Enum.all?(analyses, fn item ->
-             Enum.sort(Map.keys(item)) == ~w(depends_on id) and
-               is_binary(item["id"]) and String.starts_with?(item["id"], "analysis:") and
-               is_list(item["depends_on"]) and item["depends_on"] != [] and
-               item["depends_on"] == Enum.sort(Enum.uniq(item["depends_on"])) and
-               Enum.all?(item["depends_on"], &MapSet.member?(allowed, &1)) and
-               item["id"] not in item["depends_on"]
-           end) do
+           Enum.all?(analyses, &valid_analysis?(&1, allowed)) do
         :ok
       else
         {:error, :invalid_analysis_dependencies}
@@ -240,4 +233,23 @@ defmodule BeamCompass.Analysis.Invalidation do
   end
 
   defp check_analyses(_, _, _), do: {:error, :invalid_analysis_dependencies}
+
+  defp valid_next_input?(input) do
+    is_map(input) and Enum.sort(Map.keys(input)) == ~w(path sha256) and
+      is_binary(input["path"]) and input["path"] != "" and
+      not String.starts_with?(input["path"], "/") and
+      not String.contains?(input["path"], ["\\", ":", <<0>>]) and
+      Enum.all?(String.split(input["path"], "/"), &(&1 not in ["", ".", ".."])) and
+      is_binary(input["sha256"]) and
+      Regex.match?(~r/\A[0-9a-f]{64}\z/, input["sha256"])
+  end
+
+  defp valid_analysis?(item, allowed) do
+    Enum.sort(Map.keys(item)) == ~w(depends_on id) and
+      is_binary(item["id"]) and String.starts_with?(item["id"], "analysis:") and
+      is_list(item["depends_on"]) and item["depends_on"] != [] and
+      item["depends_on"] == Enum.sort(Enum.uniq(item["depends_on"])) and
+      Enum.all?(item["depends_on"], &MapSet.member?(allowed, &1)) and
+      item["id"] not in item["depends_on"]
+  end
 end

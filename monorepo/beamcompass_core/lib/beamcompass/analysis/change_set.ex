@@ -25,21 +25,21 @@ defmodule BeamCompass.Analysis.ChangeSet do
   }
 
   @spec compare(map(), map()) :: {:ok, map()} | {:error, term()}
-  def compare(before, after) do
+  def compare(before, later_snapshot) do
     with :ok <- Validator.validate(before),
-         :ok <- Validator.validate(after),
-         true <- before["project_id"] == after["project_id"],
-         :ok <- validate_revision_consistency(before, after) do
-      {matches, correspondences} = correspondence(before, after)
-      entity_changes = entity_changes(before, after, matches)
-      relation_changes = relation_changes(before, after, matches)
+         :ok <- Validator.validate(later_snapshot),
+         true <- before["project_id"] == later_snapshot["project_id"],
+         :ok <- validate_revision_consistency(before, later_snapshot) do
+      {matches, correspondences} = correspondence(before, later_snapshot)
+      entity_changes = entity_changes(before, later_snapshot, matches)
+      relation_changes = relation_changes(before, later_snapshot, matches)
       changes = Enum.sort_by(entity_changes ++ relation_changes, & &1["id"])
 
       body = %{
         "format" => "beamcompass.change-set",
         "schema_version" => 1,
         "before" => lineage(before),
-        "after" => lineage(after),
+        "after" => lineage(later_snapshot),
         "correspondence" => correspondences,
         "changes" => changes,
         "affected_before_ids" => affected(changes, "before"),
@@ -59,11 +59,11 @@ defmodule BeamCompass.Analysis.ChangeSet do
     end
   end
 
-  defp validate_revision_consistency(before, after) do
+  defp validate_revision_consistency(before, later_snapshot) do
     revision = before["manifest"]["source_revision"]
 
-    if is_binary(revision) and revision == after["manifest"]["source_revision"] and
-         before["manifest"]["source_digest"] != after["manifest"]["source_digest"] do
+    if is_binary(revision) and revision == later_snapshot["manifest"]["source_revision"] and
+         before["manifest"]["source_digest"] != later_snapshot["manifest"]["source_digest"] do
       {:error, :inconsistent_git_source_lineage}
     else
       :ok
@@ -121,30 +121,32 @@ defmodule BeamCompass.Analysis.ChangeSet do
   end
 
   defp structural_key(object, evidences, neighbors) do
-    {object["kind"], path(object, evidences), object["label"],
-     object["epistemic_status"], Map.get(neighbors, object["id"], [])}
+    {object["kind"], path(object, evidences), object["label"], object["epistemic_status"],
+     Map.get(neighbors, object["id"], [])}
   end
 
-  defp correspondence(before, after) do
+  defp correspondence(before, later_snapshot) do
     old = index(before["entities"])
-    later = index(after["entities"])
+    later = index(later_snapshot["entities"])
     be = index(before["evidence"])
-    ae = index(after["evidence"])
+    ae = index(later_snapshot["evidence"])
 
     exact =
       old
       |> Map.keys()
       |> Enum.filter(fn id ->
         new = later[id]
+
         not is_nil(new) and old[id]["kind"] == new["kind"] and
           not is_nil(path(old[id], be)) and path(old[id], be) == path(new, ae)
       end)
       |> Enum.sort()
       |> Map.new(&{&1, &1})
 
-    {matches, _} = extend_structural(exact, old, later, be, ae, before, after)
+    {matches, _} = extend_structural(exact, old, later, be, ae, before, later_snapshot)
     unresolved_old = Map.keys(old) -- Map.keys(matches)
     unresolved_new = Map.keys(later) -- Map.values(matches)
+
     known =
       Enum.map(matches, fn {prior, next} ->
         reason =
@@ -155,24 +157,10 @@ defmodule BeamCompass.Analysis.ChangeSet do
           end
 
         resolution = if prior == next, do: "resolved_source_identity", else: "possible_structural"
-        correspondence_row(before, after, "matched", resolution, [prior], [next], reason)
+        correspondence_row(before, later_snapshot, "matched", resolution, [prior], [next], reason)
       end)
 
-    groups =
-      Enum.reduce(unresolved_old, %{}, fn id, acc ->
-        object = old[id]
-        Map.update(acc, {object["kind"], path(object, be)}, {[id], []}, fn {left, right} ->
-          {[id | left], right}
-        end)
-      end)
-      |> then(fn acc ->
-        Enum.reduce(unresolved_new, acc, fn id, result ->
-          object = later[id]
-          Map.update(result, {object["kind"], path(object, ae)}, {[], [id]}, fn {left, right} ->
-            {left, [id | right]}
-          end)
-        end)
-      end)
+    groups = unmatched_groups(unresolved_old, unresolved_new, old, later, be, ae)
 
     ambiguous =
       groups
@@ -180,16 +168,17 @@ defmodule BeamCompass.Analysis.ChangeSet do
         not is_nil(matched_path) and left != [] and right != []
       end)
       |> Enum.map(fn {_group, {left, right}} ->
-        kind =
-          cond do
-            length(left) == 1 and length(right) == 1 -> "rename_candidate"
-            length(left) == 1 -> "split_candidate"
-            length(right) == 1 -> "merge_candidate"
-            true -> "ambiguous"
-          end
+        kind = ambiguity_kind(left, right)
 
-        correspondence_row(before, after, kind, "uncertain", left, right,
-          "same source path and kind only; labels or semantic-key collisions cannot prove continuity")
+        correspondence_row(
+          before,
+          later_snapshot,
+          kind,
+          "uncertain",
+          left,
+          right,
+          "same source path and kind only; labels or semantic-key collisions cannot prove continuity"
+        )
       end)
 
     claimed_old = ambiguous |> Enum.flat_map(& &1["before_entity_ids"])
@@ -197,20 +186,34 @@ defmodule BeamCompass.Analysis.ChangeSet do
 
     unmatched =
       Enum.map(unresolved_old -- claimed_old, fn id ->
-        correspondence_row(before, after, "unmatched_before", "unknown", [id], [],
-          "no evidence-backed uniquely corroborated successor")
+        correspondence_row(
+          before,
+          later_snapshot,
+          "unmatched_before",
+          "unknown",
+          [id],
+          [],
+          "no evidence-backed uniquely corroborated successor"
+        )
       end) ++
         Enum.map(unresolved_new -- claimed_new, fn id ->
-          correspondence_row(before, after, "unmatched_after", "unknown", [], [id],
-            "no evidence-backed uniquely corroborated predecessor")
+          correspondence_row(
+            before,
+            later_snapshot,
+            "unmatched_after",
+            "unknown",
+            [],
+            [id],
+            "no evidence-backed uniquely corroborated predecessor"
+          )
         end)
 
     {matches, Enum.sort_by(known ++ ambiguous ++ unmatched, & &1["id"])}
   end
 
-  defp extend_structural(exact, old, later, be, ae, before, after) do
+  defp extend_structural(exact, old, later, be, ae, before, later_snapshot) do
     bn = neighborhood(before)
-    an = neighborhood(after)
+    an = neighborhood(later_snapshot)
 
     old_groups =
       old
@@ -237,9 +240,9 @@ defmodule BeamCompass.Analysis.ChangeSet do
     {result, :possible_structural}
   end
 
-  defp correspondence_row(before, after, outcome, resolution, prior, later, reason) do
+  defp correspondence_row(before, later_snapshot, outcome, resolution, prior, later, reason) do
     old = index(before["entities"])
-    new = index(after["entities"])
+    new = index(later_snapshot["entities"])
     prior = Enum.sort(prior)
     later = Enum.sort(later)
 
@@ -249,38 +252,59 @@ defmodule BeamCompass.Analysis.ChangeSet do
       "before_entity_ids" => prior,
       "after_entity_ids" => later,
       "before_refs" => Enum.map(prior, &reference(before, "entity", old[&1])),
-      "after_refs" => Enum.map(later, &reference(after, "entity", new[&1])),
+      "after_refs" => Enum.map(later, &reference(later_snapshot, "entity", new[&1])),
       "basis" => reason
     }
 
     Map.put(data, "id", "correspondence:" <> fingerprint(data))
   end
 
-  defp entity_changes(before, after, matches) do
+  defp entity_changes(before, later_snapshot, matches) do
     old = index(before["entities"])
-    later = index(after["entities"])
+    later = index(later_snapshot["entities"])
 
     paired =
       Enum.flat_map(matches, fn {prior, next} ->
         before_entity = old[prior]
         after_entity = later[next]
 
-        if before_entity["kind"] not in @focus do
-          []
-        else
+        if before_entity["kind"] in @focus do
           cond do
             semantic_entity(before_entity) != semantic_entity(after_entity) or
-                source_witness(before, before_entity) != source_witness(after, after_entity) ->
-              [change(before, after, before_entity["kind"], "modified", before_entity, after_entity, "entity",
-                 "source syntax/entity role or normalized source witness changed")]
+                source_witness(before, before_entity) !=
+                  source_witness(later_snapshot, after_entity) ->
+              [
+                change(
+                  before,
+                  later_snapshot,
+                  before_entity["kind"],
+                  "modified",
+                  before_entity,
+                  after_entity,
+                  "entity",
+                  "source syntax/entity role or normalized source witness changed"
+                )
+              ]
 
             before_entity["evidence_ids"] != after_entity["evidence_ids"] ->
-              [change(before, after, before_entity["kind"], "anchor_only", before_entity, after_entity, "entity",
-                 "same unique typed source graph; source bytes may differ; runtime unchanged is not proven")]
+              [
+                change(
+                  before,
+                  later_snapshot,
+                  before_entity["kind"],
+                  "anchor_only",
+                  before_entity,
+                  after_entity,
+                  "entity",
+                  "same unique typed source graph; source bytes may differ; runtime unchanged is not proven"
+                )
+              ]
 
             true ->
               []
           end
+        else
+          []
         end
       end)
 
@@ -288,22 +312,39 @@ defmodule BeamCompass.Analysis.ChangeSet do
       old
       |> Enum.reject(fn {id, obj} -> Map.has_key?(matches, id) or obj["kind"] not in @focus end)
       |> Enum.map(fn {_id, obj} ->
-        change(before, after, obj["kind"], "removed", obj, nil, "entity",
-          "unmatched source record; absence not runtime proof")
+        change(
+          before,
+          later_snapshot,
+          obj["kind"],
+          "removed",
+          obj,
+          nil,
+          "entity",
+          "unmatched source record; absence not runtime proof"
+        )
       end)
 
     additions =
       later
       |> Enum.reject(fn {id, obj} -> id in Map.values(matches) or obj["kind"] not in @focus end)
       |> Enum.map(fn {_id, obj} ->
-        change(before, after, obj["kind"], "added", nil, obj, "entity",
-          "unmatched source record; execution not proven")
+        change(
+          before,
+          later_snapshot,
+          obj["kind"],
+          "added",
+          nil,
+          obj,
+          "entity",
+          "unmatched source record; execution not proven"
+        )
       end)
 
     paired ++ removals ++ additions
   end
 
-  defp semantic_entity(obj), do: Map.take(obj, ~w(kind label semantic_key epistemic_status limitations))
+  defp semantic_entity(obj),
+    do: Map.take(obj, ~w(kind label semantic_key epistemic_status limitations))
 
   defp source_witness(snapshot, object) do
     evidence = index(snapshot["evidence"])
@@ -313,10 +354,9 @@ defmodule BeamCompass.Analysis.ChangeSet do
     |> Enum.sort()
   end
 
-
-  defp relation_changes(before, after, matches) do
+  defp relation_changes(before, later_snapshot, matches) do
     old = index(before["relations"])
-    later = index(after["relations"])
+    later = index(later_snapshot["relations"])
 
     # An edge is joinable only if its endpoints already have corroborated
     # entity matches. Equal labels/semantic keys do not authorize an edge join.
@@ -338,21 +378,14 @@ defmodule BeamCompass.Analysis.ChangeSet do
         after_relation = later[next]
         kind = relation_type(before_relation)
 
-        cond do
-          is_nil(kind) ->
-            []
-
-          relation_signature(before_relation, matches) != relation_signature(after_relation, %{}) ->
-            [change(before, after, kind, "modified", before_relation, after_relation, "relation",
-               "linked relation kind/status/rationale changed")]
-
-          before_relation["evidence_ids"] != after_relation["evidence_ids"] ->
-            [change(before, after, kind, "anchor_only", before_relation, after_relation, "relation",
-               "same graph edge and resolution; different source evidence anchors")]
-
-          true ->
-            []
-        end
+        paired_relation_changes(
+          before,
+          later_snapshot,
+          before_relation,
+          after_relation,
+          kind,
+          matches
+        )
       end)
 
     removals =
@@ -360,9 +393,22 @@ defmodule BeamCompass.Analysis.ChangeSet do
       |> Enum.reject(fn {id, _} -> Map.has_key?(pairs, id) end)
       |> Enum.flat_map(fn {_id, r} ->
         case relation_type(r) do
-          nil -> []
-          kind -> [change(before, after, kind, "removed", r, nil, "relation",
-                     "unmatched source relation; performer/transition not observed")]
+          nil ->
+            []
+
+          kind ->
+            [
+              change(
+                before,
+                later_snapshot,
+                kind,
+                "removed",
+                r,
+                nil,
+                "relation",
+                "unmatched source relation; performer/transition not observed"
+              )
+            ]
         end
       end)
 
@@ -371,9 +417,22 @@ defmodule BeamCompass.Analysis.ChangeSet do
       |> Enum.reject(fn {id, _} -> id in Map.values(pairs) end)
       |> Enum.flat_map(fn {_id, r} ->
         case relation_type(r) do
-          nil -> []
-          kind -> [change(before, after, kind, "added", nil, r, "relation",
-                     "new proposed source relation; performer/transition not observed")]
+          nil ->
+            []
+
+          kind ->
+            [
+              change(
+                before,
+                later_snapshot,
+                kind,
+                "added",
+                nil,
+                r,
+                "relation",
+                "new proposed source relation; performer/transition not observed"
+              )
+            ]
         end
       end)
 
@@ -382,8 +441,8 @@ defmodule BeamCompass.Analysis.ChangeSet do
 
   defp joinable?(r, next, matches) do
     matches[r["source_id"]] == next["source_id"] and
-      (is_nil(r["target_id"]) and is_nil(next["target_id"]) or
-         not is_nil(r["target_id"]) and matches[r["target_id"]] == next["target_id"])
+      ((is_nil(r["target_id"]) and is_nil(next["target_id"])) or
+         (not is_nil(r["target_id"]) and matches[r["target_id"]] == next["target_id"]))
   end
 
   defp extend_relations(exact, old, later, matches) do
@@ -420,7 +479,10 @@ defmodule BeamCompass.Analysis.ChangeSet do
       "rationale" => r["rationale"],
       "source_id" => Map.get(matches, r["source_id"], r["source_id"]),
       "target_id" =>
-        if(is_nil(r["target_id"]), do: nil, else: Map.get(matches, r["target_id"], r["target_id"]))
+        if(is_nil(r["target_id"]),
+          do: nil,
+          else: Map.get(matches, r["target_id"], r["target_id"])
+        )
     }
   end
 
@@ -441,16 +503,16 @@ defmodule BeamCompass.Analysis.ChangeSet do
     }
   end
 
-  defp change(before, after, kind, operation, prior, next, object_kind, reason) do
+  defp change(before, later_snapshot, kind, operation, prior, next, object_kind, reason) do
     data = %{
       "kind" => kind,
       "operation" => operation,
       "before_ref" => if(prior, do: reference(before, object_kind, prior)),
-      "after_ref" => if(next, do: reference(after, object_kind, next)),
+      "after_ref" => if(next, do: reference(later_snapshot, object_kind, next)),
       "before_evidence_ids" => if(prior, do: prior["evidence_ids"], else: []),
       "after_evidence_ids" => if(next, do: next["evidence_ids"], else: []),
       "affected_before_ids" => if(prior, do: adjacent(before, object_kind, prior), else: []),
-      "affected_after_ids" => if(next, do: adjacent(after, object_kind, next), else: []),
+      "affected_after_ids" => if(next, do: adjacent(later_snapshot, object_kind, next), else: []),
       "basis" => reason,
       "epistemic_status" => "source_possible",
       "semantic_change" => operation != "anchor_only"
@@ -479,4 +541,76 @@ defmodule BeamCompass.Analysis.ChangeSet do
     |> Enum.uniq()
     |> Enum.sort()
   end
+
+  defp unmatched_groups(unresolved_old, unresolved_new, old, later, be, ae) do
+    Enum.reduce(unresolved_old, %{}, fn id, acc ->
+      object = old[id]
+
+      Map.update(acc, {object["kind"], path(object, be)}, {[id], []}, &prepend_old(&1, id))
+    end)
+    |> then(fn acc ->
+      Enum.reduce(unresolved_new, acc, fn id, result ->
+        object = later[id]
+
+        Map.update(result, {object["kind"], path(object, ae)}, {[], [id]}, &prepend_new(&1, id))
+      end)
+    end)
+  end
+
+  defp paired_relation_changes(
+         before,
+         later_snapshot,
+         before_relation,
+         after_relation,
+         kind,
+         matches
+       ) do
+    cond do
+      is_nil(kind) ->
+        []
+
+      relation_signature(before_relation, matches) != relation_signature(after_relation, %{}) ->
+        [
+          change(
+            before,
+            later_snapshot,
+            kind,
+            "modified",
+            before_relation,
+            after_relation,
+            "relation",
+            "linked relation kind/status/rationale changed"
+          )
+        ]
+
+      before_relation["evidence_ids"] != after_relation["evidence_ids"] ->
+        [
+          change(
+            before,
+            later_snapshot,
+            kind,
+            "anchor_only",
+            before_relation,
+            after_relation,
+            "relation",
+            "same graph edge and resolution; different source evidence anchors"
+          )
+        ]
+
+      true ->
+        []
+    end
+  end
+
+  defp ambiguity_kind(left, right) do
+    cond do
+      length(left) == 1 and length(right) == 1 -> "rename_candidate"
+      length(left) == 1 -> "split_candidate"
+      length(right) == 1 -> "merge_candidate"
+      true -> "ambiguous"
+    end
+  end
+
+  defp prepend_old({left, right}, id), do: {[id | left], right}
+  defp prepend_new({left, right}, id), do: {left, [id | right]}
 end

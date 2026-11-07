@@ -5,6 +5,9 @@ defmodule BeamCompass do
   No target application code, mix.exs, supervisor or compiler is executed.
   """
 
+  alias BeamCompass.Analysis.ChangeSet
+  alias BeamCompass.Analysis.Invalidation
+
   alias BeamCompass.Analysis.{
     Capsules,
     CausalCapsules,
@@ -152,13 +155,20 @@ defmodule BeamCompass do
 
   @doc "Typed, evidence-backed source-only changes between exact v2 snapshots."
   @spec compare_source(map(), map()) :: {:ok, map()} | {:error, term()}
-  def compare_source(before, after), do: BeamCompass.Analysis.ChangeSet.compare(before, after)
+  def compare_source(before, later_snapshot),
+    do: ChangeSet.compare(before, later_snapshot)
 
   @doc "Plan source-hash and dependent-analysis invalidation without executing target source."
   @spec invalidate_source(map(), list(map()), list(map()), list(map()), keyword()) ::
           {:ok, map()} | {:error, term()}
   def invalidate_source(snapshot, previous_inputs, next_inputs, analyses, options \\ []) do
-    BeamCompass.Analysis.Invalidation.plan(snapshot, previous_inputs, next_inputs, analyses, options)
+    Invalidation.plan(
+      snapshot,
+      previous_inputs,
+      next_inputs,
+      analyses,
+      options
+    )
   end
 
   @doc "Versioned typed preservation request for the source-only v2 export."

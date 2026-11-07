@@ -140,14 +140,18 @@ defmodule BeamCompass.Behavior.Export do
     Enum.reduce_while(inputs, :ok, fn input, _ ->
       case git(path, ["show", "#{head}:#{input["path"]}"]) do
         {:ok, bytes} ->
-          if Provenance.sha256(bytes) == input["sha256"] do
-            {:cont, :ok}
-          else
-            {:halt, {:error, :uncommitted_source_bytes}}
-          end
-        _ -> {:halt, {:error, :source_not_in_pinned_git_revision}}
+          verify_blob_hash(bytes, input["sha256"])
+
+        _ ->
+          {:halt, {:error, :source_not_in_pinned_git_revision}}
       end
     end)
+  end
+
+  defp verify_blob_hash(bytes, expected) do
+    if Provenance.sha256(bytes) == expected,
+      do: {:cont, :ok},
+      else: {:halt, {:error, :uncommitted_source_bytes}}
   end
 
   defp git(root, args) do

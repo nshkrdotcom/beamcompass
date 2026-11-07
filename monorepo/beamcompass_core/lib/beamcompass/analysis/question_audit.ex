@@ -47,7 +47,7 @@ defmodule BeamCompass.Analysis.QuestionAudit do
          "results" => results,
          "metrics" => metrics,
          "limitations" => [
-           "Oracle is human-authored, source-scoped, and cannot establish runtime truth",
+           "Oracle is independently supplied, source-scoped, and cannot establish runtime truth",
            "Unknown means insufficient evidence, never that behavior is absent"
          ]
        }}

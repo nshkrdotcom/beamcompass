@@ -58,7 +58,6 @@ defmodule BeamCompass.Behavior.Archive do
     else
       false -> {:error, :noncanonical_archive_or_wrong_identity}
       {:error, reason} -> {:error, reason}
-      _ -> {:error, :invalid_archive}
     end
   end
 
@@ -75,7 +74,7 @@ defmodule BeamCompass.Behavior.Archive do
         {:error, :invalid_archive_envelope}
 
       bundle["format"] != "beamcompass.persistent-snapshot" or
-          bundle["schema_version"] != 1 or bundle["snapshot_schema_version"] != 2 ->
+        bundle["schema_version"] != 1 or bundle["snapshot_schema_version"] != 2 ->
         {:error, :unsupported_archive_version}
 
       not is_binary(bundle["content_id"]) or
@@ -99,7 +98,8 @@ defmodule BeamCompass.Behavior.Archive do
   def validate(_), do: {:error, :invalid_archive_envelope}
 
   # Disallow version migration by rebranding old facts as newer evidence.
-  @spec migrate(term(), integer()) :: {:error, :source_reextraction_required | :unsupported_archive_version}
+  @spec migrate(term(), integer()) ::
+          {:error, :source_reextraction_required | :unsupported_archive_version}
   def migrate(%BeamCompass.Model.Snapshot{}, 2), do: {:error, :source_reextraction_required}
   def migrate(_, _), do: {:error, :unsupported_archive_version}
 
@@ -112,14 +112,18 @@ defmodule BeamCompass.Behavior.Archive do
     try do
       with :ok <- File.write(temp, bytes, [:binary, :exclusive]) do
         case File.ln(temp, path) do
-          :ok -> :ok
+          :ok ->
+            :ok
+
           {:error, :eexist} ->
             case File.read(path) do
               {:ok, ^bytes} -> :ok
               {:ok, _other} -> {:error, :archive_conflict}
               error -> error
             end
-          error -> error
+
+          error ->
+            error
         end
       end
     after
@@ -146,9 +150,7 @@ defmodule BeamCompass.Behavior.Archive do
             Regex.match?(@hex, input["sha256"])
         end)
 
-    if not valid do
-      {:error, :invalid_archive_inputs}
-    else
+    if valid do
       paths = Enum.map(inputs, & &1["path"])
       by_path = Map.new(inputs, &{&1["path"], &1["sha256"]})
 
@@ -157,17 +159,21 @@ defmodule BeamCompass.Behavior.Archive do
              snapshot["manifest"]["source_digest"] ==
                Provenance.sha256(Json.encode(inputs)),
            true <-
-             Enum.all?(snapshot["evidence"], fn ev ->
-               ev["anchor"]["source_sha256"] == by_path[ev["anchor"]["path"]]
-             end) do
+             Enum.all?(snapshot["evidence"], &matching_source?(&1, by_path)) do
         :ok
       else
         false -> {:error, :archive_source_mismatch}
       end
+    else
+      {:error, :invalid_archive_inputs}
     end
   end
 
   defp validate_inputs(_, _), do: {:error, :invalid_archive_inputs}
+
+  defp matching_source?(evidence, by_path) do
+    evidence["anchor"]["source_sha256"] == by_path[evidence["anchor"]["path"]]
+  end
 
   defp valid_path?(path) when is_binary(path) do
     path != "" and not String.starts_with?(path, "/") and
