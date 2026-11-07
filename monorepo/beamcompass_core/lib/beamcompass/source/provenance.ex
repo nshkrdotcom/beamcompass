@@ -2,7 +2,7 @@ defmodule BeamCompass.Source.Provenance do
   @moduledoc "Fresh, nonexecuting source bytes/parser context for v2. Never reconstructed from a v1 snapshot."
 
   alias BeamCompass.Json
-  alias BeamCompass.Source.{BoundaryHints, CausalHints, Discovery}
+  alias BeamCompass.Source.{BoundaryHints, CausalHints, Discovery, Safety}
   alias BeamCompass.Source.Providers.Quoted
 
   @settings %{
@@ -18,22 +18,31 @@ defmodule BeamCompass.Source.Provenance do
   @spec scan(String.t()) :: {:ok, map()} | {:error, term()}
   def scan(path) when is_binary(path) do
     with {:ok, projects} <- Discovery.discover(path),
+         :ok <- Safety.inventory(projects),
          {:ok, sources} <- read_sources(projects) do
-      inputs = Enum.map(sources, &%{"path" => &1.path, "sha256" => &1.sha256})
+      parsed_sources = Enum.map(sources, &parse_source/1)
+      settings = Map.put(@settings, "resource_guards", Safety.limits())
+      fatal = Enum.find(parsed_sources, &Map.has_key?(&1, :fatal_error))
 
-      {:ok,
-       %{
-         projects: projects,
-         sources: Enum.map(sources, &parse_source/1),
-         inputs: inputs,
-         settings: @settings,
-         source_digest: sha256(Json.encode(inputs)),
-         config_digest: sha256(Json.encode(@settings)),
-         toolchain: %{
-           "elixir" => System.version(),
-           "otp" => to_string(:erlang.system_info(:otp_release))
-         }
-       }}
+      if fatal do
+        {:error, {:source_parser_isolation_failed, fatal.path, fatal.fatal_error}}
+      else
+        inputs = Enum.map(sources, &%{"path" => &1.path, "sha256" => &1.sha256})
+
+        {:ok,
+         %{
+           projects: projects,
+           sources: parsed_sources,
+           inputs: inputs,
+           settings: settings,
+           source_digest: sha256(Json.encode(inputs)),
+           config_digest: sha256(Json.encode(settings)),
+           toolchain: %{
+             "elixir" => System.version(),
+             "otp" => to_string(:erlang.system_info(:otp_release))
+           }
+         }}
+      end
     end
   end
 
@@ -45,36 +54,40 @@ defmodule BeamCompass.Source.Provenance do
       end)
     end)
     |> Enum.sort_by(fn {_absolute, relative, _project} -> relative end)
-    |> Enum.reduce_while({:ok, []}, fn {absolute, relative, project}, {:ok, acc} ->
-      case File.read(absolute) do
-        {:ok, bytes} ->
+    |> Enum.reduce_while({:ok, [], 0}, fn {absolute, relative, project}, {:ok, acc, total} ->
+      case Safety.read(absolute, relative, total) do
+        {:ok, bytes, new_total} ->
           item = %{path: relative, project: project, sha256: sha256(bytes), bytes: bytes}
-          {:cont, {:ok, [item | acc]}}
+          {:cont, {:ok, [item | acc], new_total}}
 
         {:error, reason} ->
           {:halt, {:error, {:source_read_failed, relative, reason}}}
       end
     end)
     |> case do
-      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:ok, reversed, _total} -> {:ok, Enum.reverse(reversed)}
       other -> other
     end
   end
 
   defp parse_source(source) do
-    case Quoted.scan(source.bytes, source.path) do
-      {:ok, facts} ->
-        additions = BoundaryHints.scan(source.bytes, source.path)
-        all = (facts ++ additions) |> Enum.uniq_by(& &1.id) |> Enum.sort_by(& &1.id)
+    parsed =
+      Safety.run(fn ->
+        case Quoted.scan(source.bytes, source.path) do
+          {:ok, facts} ->
+            additions = BoundaryHints.scan(source.bytes, source.path)
+            all = (facts ++ additions) |> Enum.uniq_by(& &1.id) |> Enum.sort_by(& &1.id)
+            %{facts: all, hints: CausalHints.scan(source.bytes), issue: nil}
 
-        Map.merge(Map.delete(source, :bytes), %{
-          facts: all,
-          hints: CausalHints.scan(source.bytes),
-          issue: nil
-        })
+          {:error, reason} ->
+            %{facts: [], hints: [], issue: reason}
+        end
+      end)
 
+    case parsed do
+      {:ok, result} -> Map.merge(Map.delete(source, :bytes), result)
       {:error, reason} ->
-        Map.merge(Map.delete(source, :bytes), %{facts: [], hints: [], issue: reason})
+        Map.merge(Map.delete(source, :bytes), %{facts: [], hints: [], issue: inspect(reason), fatal_error: reason})
     end
   end
 

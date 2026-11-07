@@ -1,0 +1,27 @@
+{
+  "format": "beamcompass.p06-corpora",
+  "schema_version": 1,
+  "provenance": "Source files supplied inside P05B file snapshots. No external third-party source acquisition or Git revision is asserted.",
+  "minimum_local_distinct_projects": 3,
+  "requires_independent_external_corpus_for_broad_release": true,
+  "corpora": [
+    {
+      "id": "beamcompass-core",
+      "root": "monorepo/beamcompass_core",
+      "kind": "real-first-party-library",
+      "provenance": "Bundled core application's lib/**/*.ex and lib/**/*.exs; Mix treated as data"
+    },
+    {
+      "id": "beamcompass-web",
+      "root": "monorepo/beamcompass_web",
+      "kind": "real-first-party-phoenix-web",
+      "provenance": "Bundled web application's lib/**/*.ex and lib/**/*.exs; Mix treated as data"
+    },
+    {
+      "id": "ledger-sample",
+      "root": "fixtures/ledger_sample",
+      "kind": "controlled-mix-application-fixture",
+      "provenance": "Bundled ledger source fixture, not independently acquired production code"
+    }
+  ]
+}

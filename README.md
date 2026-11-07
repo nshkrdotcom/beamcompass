@@ -160,3 +160,35 @@ with `P05_SOURCE_CI_ONLY=1`, explicitly leaving external parent-docset gates
 unrun. The complete local release runner requires that separate docset; a green
 source CI run alone is never the P05A/P05B controller exit. No CI run is
 claimed by A.
+
+## P06 source-only hardening (A implementation, not release-qualified)
+
+Frozen P06 tasks now have source/test implementations: bounded nonexecuting
+Elixir source scanning (`BeamCompass.Source.Safety`), fail-closed symlink and
+oversize guards, parser worker heap/timeout, v1 atomic persistence and v2
+content-addressed archive recovery, exact v1/v2 compatibility transport
+(`BeamCompass.wrap_compatibility/1`, `rehydrate_compatibility/1`), explicit
+cross-version semantic promotion refusal, and release eligibility checks.
+Technical parser limits are **not** owner-approved performance or recovery SLOs;
+no compiled/observed target analysis, OS sandbox, publisher signature or Grand
+approval engine is provided.
+
+`python3 scripts/p06_release.py --source-root . --check-reproducible` exercises
+an unsigned deterministic source release and content integrity only.
+`python3 scripts/p06_corpus.py --source-root . --docset-root <committed-docset>
+--out <output>` attempts two real source-only trusted-core Mix exports per
+bundled corpus with independent Python reader checks and sampled per-process
+RSS/wall measurements; `--inventory-only` is explicitly NOT passing exporter
+or scale evidence. The included apps are two actual first-party apps and one
+controlled ledger fixture; a separately documented, independently acquired
+project must be provided as `--external-project-root` and
+`--external-provenance` to qualify broader real corpora. Never enter an
+inspected target with Mix or evaluate its config/modules/macros.
+
+The authoritative strict B run is `sh scripts/verify_p06.sh` on the user-committed
+source with separately user-committed parent docset and real owner-approved
+budgets/recovery evidence. It intentionally refuses a green release when these
+are missing. The P06 source-only CI workflow is only a subset; P05 live
+browser/CLI parity must be rerun on a real trusted local Elixir+Node toolchain.
+As supplied in A, Elixir/Mix is unavailable, no owner-approved scale/recovery
+values exist, and P06A remains Active pending six measured acceptance exits.

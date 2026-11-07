@@ -18,15 +18,18 @@ defmodule BeamCompass do
     SourceProjection
   }
 
+  alias BeamCompass.Artifact.Migration
+  alias BeamCompass.Release.Policy
   alias BeamCompass.Behavior.{Archive, Export, Validator}
   alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id
   alias BeamCompass.Model.{Snapshot, Store}
-  alias BeamCompass.Source.{Discovery, Scanner}
+  alias BeamCompass.Source.{Discovery, Safety, Scanner}
 
   @spec scan(String.t()) :: {:ok, Snapshot.t()} | {:error, term()}
   def scan(path) do
-    with {:ok, projects} <- Discovery.discover(path) do
+    with {:ok, projects} <- Discovery.discover(path),
+         :ok <- Safety.inventory(projects) do
       results =
         for project <- projects, {absolute, relative} <- project.paths do
           scan_file(absolute, relative)
@@ -52,8 +55,8 @@ defmodule BeamCompass do
   end
 
   defp scan_file(absolute, relative) do
-    case File.read(absolute) do
-      {:ok, source} ->
+    case Safety.read(absolute, relative, 0) do
+      {:ok, source, _total} ->
         scan_source(source, relative)
 
       {:error, reason} ->
@@ -64,9 +67,10 @@ defmodule BeamCompass do
   defp scan_source(source, relative) do
     identity = {relative, Id.for_parts([source])}
 
-    case Scanner.scan(source, relative) do
-      {:ok, facts} -> {facts, [], identity}
-      {:error, reason} -> {[], [%{"path" => relative, "reason" => reason}], identity}
+    case Safety.run(fn -> Scanner.scan(source, relative) end) do
+      {:ok, {:ok, facts}} -> {facts, [], identity}
+      {:ok, {:error, reason}} -> {[], [%{"path" => relative, "reason" => reason}], identity}
+      {:error, reason} -> {[], [%{"path" => relative, "reason" => inspect(reason)}], identity}
     end
   end
 
@@ -202,6 +206,19 @@ defmodule BeamCompass do
   def navigator_view(source_snapshot_v2, query \\ %{}) do
     Navigator.view(source_snapshot_v2, query)
   end
+
+  @doc "Wrap a validated supported v1/v2 payload without claiming semantic migration."
+  @spec wrap_compatibility(Snapshot.t() | map()) :: {:ok, map()} | {:error, term()}
+  def wrap_compatibility(snapshot), do: Migration.wrap(snapshot)
+
+  @doc "Rehydrate an exact legacy or v2 payload from a loss-accounted wrapper."
+  @spec rehydrate_compatibility(map()) :: {:ok, Snapshot.t() | map()} | {:error, term()}
+  def rehydrate_compatibility(envelope), do: Migration.rehydrate(envelope)
+
+  @doc "Fail-closed release eligibility using observed measurements and owner budgets."
+  @spec release_eligibility(map(), map() | nil, list(map())) :: {:ok, map()} | {:error, map()}
+  def release_eligibility(measured, approval, findings),
+    do: Policy.evaluate(measured, approval, findings)
 
   @spec inventory(Snapshot.t()) :: map()
   def inventory(%Snapshot{} = snapshot) do

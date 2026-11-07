@@ -8,11 +8,12 @@ defmodule BeamCompass.Behavior.Archive do
   code. A legacy v1 file cannot be promoted to v2 without a new source scan.
   """
 
-  alias BeamCompass.Behavior.Validator
+  alias BeamCompass.Behavior.{Store, Validator}
   alias BeamCompass.Json
   alias BeamCompass.Source.Provenance
 
   @hex ~r/\A[0-9a-f]{64}\z/
+  @max_archive_bytes 64 * 1024 * 1024
   @bundle_keys ~w(format schema_version content_id snapshot_schema_version snapshot inputs)
 
   @spec build(map(), list(map())) :: {:ok, map()} | {:error, term()}
@@ -38,7 +39,9 @@ defmodule BeamCompass.Behavior.Archive do
   def put(snapshot, inputs, root) when is_binary(root) do
     with {:ok, bundle} <- build(snapshot, inputs),
          {:ok, path} <- location(root, bundle["content_id"]),
+         :ok <- Store.safe_parents(path),
          :ok <- File.mkdir_p(Path.dirname(path)),
+         :ok <- Store.safe_parents(path),
          :ok <- write_once(bundle, path) do
       {:ok, %{"content_id" => bundle["content_id"], "path" => path}}
     end
@@ -49,7 +52,8 @@ defmodule BeamCompass.Behavior.Archive do
   @spec get(String.t(), String.t()) :: {:ok, map()} | {:error, term()}
   def get(root, content_id) do
     with {:ok, path} <- location(root, content_id),
-         {:ok, bytes} <- File.read(path),
+         :ok <- Store.safe_parents(path),
+         {:ok, bytes} <- safe_read(path),
          {:ok, bundle} <- JSON.decode(bytes),
          :ok <- validate(bundle),
          true <- bytes == Json.encode(bundle) <> "\n",
@@ -116,7 +120,7 @@ defmodule BeamCompass.Behavior.Archive do
             :ok
 
           {:error, :eexist} ->
-            case File.read(path) do
+            case safe_read(path) do
               {:ok, ^bytes} -> :ok
               {:ok, _other} -> {:error, :archive_conflict}
               error -> error
@@ -128,6 +132,19 @@ defmodule BeamCompass.Behavior.Archive do
       end
     after
       File.rm(temp)
+    end
+  end
+
+  defp safe_read(path) do
+    with {:ok, %File.Stat{type: :regular, size: size}} <- File.lstat(path),
+         true <- size <= @max_archive_bytes,
+         {:ok, bytes} <- File.read(path),
+         true <- byte_size(bytes) <= @max_archive_bytes do
+      {:ok, bytes}
+    else
+      false -> {:error, :archive_size_limit}
+      {:ok, _} -> {:error, :unsafe_archive_file_type}
+      {:error, reason} -> {:error, reason}
     end
   end
 
