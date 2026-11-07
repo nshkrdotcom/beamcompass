@@ -7,6 +7,7 @@ defmodule BeamCompass do
 
   alias BeamCompass.Analysis.ChangeSet
   alias BeamCompass.Analysis.Invalidation
+  alias BeamCompass.Analysis.Navigator
 
   alias BeamCompass.Analysis.{
     Capsules,
@@ -199,7 +200,7 @@ defmodule BeamCompass do
   @doc "Strict source-only navigator view shared by LiveView and standalone consumers."
   @spec navigator_view(map(), map()) :: {:ok, map()} | {:error, term()}
   def navigator_view(source_snapshot_v2, query \\ %{}) do
-    BeamCompass.Analysis.Navigator.view(source_snapshot_v2, query)
+    Navigator.view(source_snapshot_v2, query)
   end
 
   @spec inventory(Snapshot.t()) :: map()

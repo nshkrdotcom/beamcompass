@@ -53,21 +53,7 @@ defmodule BeamCompassWeb.NavigatorSource do
         {:error, :revision_unavailable}
 
       true ->
-        project_id = base["project_id"]
-
-        case catalog_path(requested) do
-          {:ok, path} ->
-            case read(path) do
-              {:ok, %{"snapshot_id" => ^requested, "project_id" => ^project_id} = revision} ->
-                {:ok, revision}
-
-              _ ->
-                {:error, :revision_unavailable}
-            end
-
-          _ ->
-            {:error, :revision_unavailable}
-        end
+        load_revision(requested, base["project_id"])
     end
   end
 
@@ -76,40 +62,54 @@ defmodule BeamCompassWeb.NavigatorSource do
   @doc "List only validated revisions belonging to the currently opened project."
   @spec revisions(map()) :: [map()]
   def revisions(%{"snapshot_id" => id, "project_id" => project} = base) do
-    catalog =
-      case Application.get_env(:beamcompass_web, :navigator_catalog_dir) do
-        path when is_binary(path) and byte_size(path) > 0 ->
-          case File.ls(path) do
-            {:ok, names} ->
-              names
-              |> Enum.filter(&String.ends_with?(&1, ".json"))
-              |> Enum.filter(&(Regex.match?(@snapshot_id, String.trim_trailing(&1, ".json"))))
-              |> Enum.sort()
-              |> Enum.take(@max_revisions)
-              |> Enum.flat_map(fn name ->
-                revision_id = String.trim_trailing(name, ".json")
-
-                case read(Path.join(path, name)) do
-                  {:ok, %{"snapshot_id" => ^revision_id, "project_id" => ^project} = value} ->
-                    [value]
-
-                  _ ->
-                    []
-                end
-              end)
-
-            _ ->
-              []
-          end
-
-        _ ->
-          []
-      end
+    catalog = catalog_revisions(project)
 
     [base | catalog]
     |> Enum.uniq_by(& &1["snapshot_id"])
     |> Enum.sort_by(& &1["snapshot_id"])
     |> Enum.map(&%{"snapshot_id" => &1["snapshot_id"], "current" => &1["snapshot_id"] == id})
+  end
+
+  defp load_revision(requested, project) do
+    with {:ok, path} <- catalog_path(requested),
+         {:ok, %{"snapshot_id" => ^requested, "project_id" => ^project} = revision} <- read(path) do
+      {:ok, revision}
+    else
+      _ -> {:error, :revision_unavailable}
+    end
+  end
+
+  defp catalog_revisions(project) do
+    case Application.get_env(:beamcompass_web, :navigator_catalog_dir) do
+      path when is_binary(path) and byte_size(path) > 0 -> catalog_entries(path, project)
+      _ -> []
+    end
+  end
+
+  defp catalog_entries(path, project) do
+    case File.ls(path) do
+      {:ok, names} ->
+        names
+        |> Enum.filter(
+          &(String.ends_with?(&1, ".json") and
+              Regex.match?(@snapshot_id, String.trim_trailing(&1, ".json")))
+        )
+        |> Enum.sort()
+        |> Enum.take(@max_revisions)
+        |> Enum.flat_map(&catalog_entry(path, &1, project))
+
+      _ ->
+        []
+    end
+  end
+
+  defp catalog_entry(path, name, project) do
+    revision_id = String.trim_trailing(name, ".json")
+
+    case read(Path.join(path, name)) do
+      {:ok, %{"snapshot_id" => ^revision_id, "project_id" => ^project} = value} -> [value]
+      _ -> []
+    end
   end
 
   defp catalog_path(id) do

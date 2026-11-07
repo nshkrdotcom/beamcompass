@@ -6,6 +6,7 @@ import base64
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import unittest
 from urllib.parse import parse_qs, urlparse
@@ -22,7 +23,7 @@ class BrowserAcceptance(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.pw=sync_playwright().start()
-        cls.browser=cls.pw.chromium.launch(headless=True,executable_path='/usr/bin/chromium',args=['--no-sandbox'])
+        cls.browser=cls.pw.chromium.launch(headless=True,executable_path=os.environ.get('P05_CHROMIUM', '/usr/bin/chromium'),args=['--no-sandbox'])
 
     @classmethod
     def tearDownClass(cls):

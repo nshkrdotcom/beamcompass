@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Beamcompass.Navigator do
   use Mix.Task
 
   alias BeamCompass.Analysis.Navigator
+  alias BeamCompass.Behavior.Store
   alias BeamCompass.Behavior.Validator
   alias BeamCompass.Json
 
@@ -40,7 +41,7 @@ defmodule Mix.Tasks.Beamcompass.Navigator do
   defp write(result, nil), do: IO.puts(Json.encode(result))
 
   defp write(result, output) do
-    case BeamCompass.Behavior.Store.write_json(result, output) do
+    case Store.write_json(result, output) do
       :ok -> Mix.shell().info("Saved #{output}")
       {:error, reason} -> Mix.raise("navigator export refused: #{inspect(reason)}")
     end

@@ -9,11 +9,12 @@
   },
   "dependencies": {
     "phoenix": "~1.8.0",
-    "phoenix_live_view": "~1.1.0"
+    "phoenix_live_view": "1.2.13"
   },
   "devDependencies": {
     "esbuild": "~0.25.0",
     "typescript": "~5.8.0",
-    "axe-core": "~4.10.3"
+    "axe-core": "~4.10.3",
+    "@types/phoenix": "^1.6.7"
   }
 }

@@ -62,7 +62,8 @@ defmodule BeamCompassWeb.MixProject do
         {"Project", ["CHANGELOG.md", "LICENSE"]}
       ],
       groups_for_modules: [
-        {"Reports", [BeamCompassWeb.Report, BeamCompassWeb.NavigatorLive, BeamCompassWeb.NavigatorSource]},
+        {"Reports",
+         [BeamCompassWeb.Report, BeamCompassWeb.NavigatorLive, BeamCompassWeb.NavigatorSource]},
         {"Mix tasks", ~r/^Mix.Tasks/}
       ]
     ]
@@ -82,8 +83,9 @@ defmodule BeamCompassWeb.MixProject do
       core_dependency(),
       {:phoenix, "~> 1.8"},
       {:phoenix_live_view, "~> 1.1"},
+      {:lazy_html, ">= 0.1.0", only: :test},
       {:phoenix_html, "~> 4.2"},
-      {:plug_cowboy, "~> 2.7"},
+      {:bandit, "~> 1.0"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]

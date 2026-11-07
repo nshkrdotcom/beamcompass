@@ -38,16 +38,14 @@ defmodule BeamCompass.Analysis.Navigator do
   @doc "Strict query parser: duplicate keys are errors; no silent overwrite."
   @spec from_query(map(), String.t()) :: {:ok, map()} | {:error, term()}
   def from_query(snapshot, query) when is_binary(query) and byte_size(query) <= 4096 do
-    try do
-      pairs = URI.query_decoder(query) |> Enum.to_list()
-      keys = Enum.map(pairs, &elem(&1, 0))
+    pairs = URI.query_decoder(query) |> Enum.to_list()
+    keys = Enum.map(pairs, &elem(&1, 0))
 
-      if length(keys) == length(Enum.uniq(keys)),
-        do: view(snapshot, Map.new(pairs)),
-        else: {:error, :duplicate_navigation_field}
-    rescue
-      ArgumentError -> {:error, :invalid_navigation_encoding}
-    end
+    if length(keys) == length(Enum.uniq(keys)),
+      do: view(snapshot, Map.new(pairs)),
+      else: {:error, :duplicate_navigation_field}
+  rescue
+    ArgumentError -> {:error, :invalid_navigation_encoding}
   end
 
   def from_query(_, _), do: {:error, :invalid_navigation_encoding}
@@ -110,7 +108,8 @@ defmodule BeamCompass.Analysis.Navigator do
           "budget" => Integer.to_string(elem(budget, 0))
         }
 
-        {:ok, Map.merge(normalized, Map.take(query, ~w(focus_kind focus_id selected_kind selected_id)))}
+        {:ok,
+         Map.merge(normalized, Map.take(query, ~w(focus_kind focus_id selected_kind selected_id)))}
     end
   end
 
@@ -173,13 +172,19 @@ defmodule BeamCompass.Analysis.Navigator do
            "drawer" => drawer(snapshot, selected, indexes, q),
            "projection" => projection,
            "issues" => snapshot["issues"],
-           "limitations" => Enum.uniq(snapshot["limitations"] ++ projection["receipt"]["limitations"])
+           "limitations" =>
+             Enum.uniq(snapshot["limitations"] ++ projection["receipt"]["limitations"])
          }}
       end
     else
-      {:error, :focus_not_found} -> {:ok, unavailable(snapshot, q, "focus_target_unavailable")}
-      {:error, :selected_not_found} -> {:ok, unavailable(snapshot, q, "selected_target_unavailable")}
-      {:error, other} -> {:error, other}
+      {:error, :focus_not_found} ->
+        {:ok, unavailable(snapshot, q, "focus_target_unavailable")}
+
+      {:error, :selected_not_found} ->
+        {:ok, unavailable(snapshot, q, "selected_target_unavailable")}
+
+      {:error, other} ->
+        {:error, other}
     end
   end
 
@@ -191,8 +196,11 @@ defmodule BeamCompass.Analysis.Navigator do
       {:ok, nil}
     else
       case Validator.reference(snapshot, kind, id) do
-        {:error, :not_found} -> {:error, if(prefix == "focus", do: :focus_not_found, else: :selected_not_found)}
-        value -> value
+        {:error, :not_found} ->
+          {:error, if(prefix == "focus", do: :focus_not_found, else: :selected_not_found)}
+
+        value ->
+          value
       end
     end
   end
@@ -208,7 +216,8 @@ defmodule BeamCompass.Analysis.Navigator do
       "diagnostics" => [
         %{
           "code" => code,
-          "message" => "Pinned navigation target is unavailable in this exact source snapshot; no fallback was used.",
+          "message" =>
+            "Pinned navigation target is unavailable in this exact source snapshot; no fallback was used.",
           "requested" => q
         }
       ],
@@ -251,9 +260,14 @@ defmodule BeamCompass.Analysis.Navigator do
     }
   end
 
-  defp stage_edge(%{"object_kind" => "relation", "object_id" => id}, indexes, visible) do
+  defp stage_edge(%{"object_kind" => "relation", "object_id" => id} = ref, indexes, visible) do
     record = indexes["relation"][id]
-    ids = MapSet.new(Enum.filter(visible, &(&1["object_kind"] == "entity")) |> Enum.map(& &1["object_id"]))
+
+    ids =
+      MapSet.new(
+        Enum.filter(visible, &(&1["object_kind"] == "entity"))
+        |> Enum.map(& &1["object_id"])
+      )
 
     # A drawn connector is only a representation of an explicit *source relation*;
     # no client-side join or invented target may fill a missing endpoint.
@@ -296,9 +310,10 @@ defmodule BeamCompass.Analysis.Navigator do
           "anchor" => item["anchor"],
           "basis" => item["basis"],
           "input_evidence_ids" => item["input_evidence_ids"],
-          "lineage" => Enum.map(item["input_evidence_ids"], fn parent ->
-            %{"id" => parent, "href" => href(q, "evidence", parent)}
-          end),
+          "lineage" =>
+            Enum.map(item["input_evidence_ids"], fn parent ->
+              %{"id" => parent, "href" => href(q, "evidence", parent)}
+            end),
           "href" => href(q, "evidence", id)
         }
       end)
@@ -330,7 +345,11 @@ defmodule BeamCompass.Analysis.Navigator do
     |> Enum.filter(&(&1["source_id"] == id or &1["target_id"] == id))
     |> Enum.map(fn rel ->
       %{
-        "role" => if(rel["source_id"] == id, do: "outgoing_source_relation", else: "incoming_source_relation"),
+        "role" =>
+          if(rel["source_id"] == id,
+            do: "outgoing_source_relation",
+            else: "incoming_source_relation"
+          ),
         "kind" => rel["kind"],
         "resolution" => rel["resolution"],
         "reference" => reference(snapshot, "relation", indexes["relation"][rel["id"]]),
@@ -356,7 +375,13 @@ defmodule BeamCompass.Analysis.Navigator do
           "href" => href(q, "entity", target)
         }
       else
-        %{"role" => role, "kind" => "unavailable_target", "resolution" => "unresolved", "reference" => nil, "href" => nil}
+        %{
+          "role" => role,
+          "kind" => "unavailable_target",
+          "resolution" => "unresolved",
+          "reference" => nil,
+          "href" => nil
+        }
       end
     end)
   end
@@ -423,8 +448,10 @@ defmodule BeamCompass.Analysis.Navigator do
     %{
       "self" => "?" <> query_string(q),
       "lenses" => Map.new(@lenses, &{&1, "?" <> query_string(Map.put(q, "lens", &1))}),
-      "zoom_in" => "?" <> query_string(Map.put(q, "budget", Integer.to_string(min(256, budget * 2)))),
-      "zoom_out" => "?" <> query_string(Map.put(q, "budget", Integer.to_string(max(1, div(budget, 2)))))
+      "zoom_in" =>
+        "?" <> query_string(Map.put(q, "budget", Integer.to_string(min(256, budget * 2)))),
+      "zoom_out" =>
+        "?" <> query_string(Map.put(q, "budget", Integer.to_string(max(1, div(budget, 2)))))
     }
   end
 

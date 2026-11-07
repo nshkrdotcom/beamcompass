@@ -6,6 +6,7 @@ trusted local checkouts after the user has separately committed both A ZIPs.
 """
 from __future__ import annotations
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,6 +26,14 @@ CHROMIUM = os.environ.get('P05_CHROMIUM', '/usr/bin/chromium')
 METRICS = Path(os.environ.get('P05_BROWSER_METRICS', '/tmp/beamcompass-p05-browser-metrics.json'))
 
 
+def persist_model(kind, model):
+    directory = METRICS.parent / 'models'
+    directory.mkdir(parents=True, exist_ok=True)
+    data = json.dumps(model, sort_keys=True, ensure_ascii=False)
+    digest = hashlib.sha256(data.encode()).hexdigest()
+    (directory / f'{kind}-{digest}.json').write_text(data + '\n')
+
+
 def headless(query: str, source: Path | None = None) -> dict:
     """A FRESH trusted-core Mix process, not browser-created semantic JSON."""
     with tempfile.TemporaryDirectory(prefix='p05-headless-') as temp:
@@ -35,14 +44,18 @@ def headless(query: str, source: Path | None = None) -> dict:
         )
         if completed.returncode:
             raise AssertionError(f'Independent core CLI failed: {completed.stdout} {completed.stderr}')
-        return json.loads(out.read_text())
+        result = json.loads(out.read_text())
+        persist_model('headless', result)
+        return result
 
 
 def embedded_view(page) -> dict:
     encoded = page.locator('#semantic-stage').get_attribute('data-view')
     if not encoded:
         raise AssertionError('LiveView has no core-generated JSON contract')
-    return json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+    result = json.loads(base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)))
+    persist_model('browser', result)
+    return result
 
 
 def url_with(params: dict) -> str:
@@ -185,6 +198,49 @@ class RealPhoenixConsumerTests(unittest.TestCase):
         self.assertEqual(revised,headless(urlsplit(self.page.url).query,alternate))
         self.assertIsNone(revised['selection'], 'Revision navigation must not map objects by label')
 
+    def test_question_first_all_lenses_history_and_accessibility_tree(self):
+        initial = self.navigate({'lens': 'behavior', 'budget': '128'})
+        question = self.page.get_by_role('navigation', name='Source-grounded questions').get_by_role('link').first
+        question.click()
+        self.page.wait_for_function("new URL(location.href).searchParams.has('focus_id')")
+        focused = embedded_view(self.page)
+        self.assertIsNotNone(focused['focus'])
+        self.assertEqual(focused, headless(urlsplit(self.page.url).query))
+        for lens in ('behavior', 'effects', 'state', 'failure'):
+            self.page.get_by_role('navigation', name='Source view lenses').get_by_role('link', name=lens.capitalize(), exact=True).click()
+            self.page.wait_for_function("lens => new URL(location.href).searchParams.get('lens') === lens", arg=lens)
+            self.assertEqual(embedded_view(self.page), headless(urlsplit(self.page.url).query))
+        self.page.go_back(wait_until='domcontentloaded')
+        self.page.wait_for_function("new URL(location.href).searchParams.get('lens') === 'state'")
+        self.page.wait_for_function("JSON.parse(atob(document.querySelector('#semantic-stage').dataset.view.replace(/-/g,'+').replace(/_/g,'/'))).lens === 'state'")
+        self.assertEqual(embedded_view(self.page), headless(urlsplit(self.page.url).query))
+        tree = self.page.locator('main').aria_snapshot()
+        self.assertIn('Source and evidence details', tree)
+        self.assertIn('Preservation, omissions & uncertainty', tree)
+        self.measurements.append({'accessibility_tree': tree})
+
+    def test_hostile_query_is_inert_and_duplicate_fields_are_rejected(self):
+        self.navigate({'selected_kind': 'entity', 'selected_id': '<script>window.p05Injected=true</script>'}, expect_stage=False)
+        self.assertIn('selected_target_unavailable', self.page.get_by_role('alert').inner_text())
+        self.assertIsNone(self.page.evaluate('window.p05Injected'))
+        self.page.goto(URL + '?lens=behavior&lens=effects', wait_until='domcontentloaded')
+        self.assertIn('duplicate_navigation_field', self.page.get_by_role('alert').inner_text())
+        self.assertEqual(self.page.locator('.stage-card').count(), 0)
+
+    def test_derived_evidence_lineage_selects_exact_input(self):
+        snapshot = json.loads(SNAPSHOT.read_text())
+        derived = next(e for e in snapshot['evidence'] if e['input_evidence_ids'])
+        view = self.navigate({'lens': 'behavior', 'budget': '64',
+                              'selected_kind': 'evidence', 'selected_id': derived['id']})
+        self.assertEqual(view, headless(urlsplit(self.page.url).query))
+        row = next(e for e in view['drawer']['evidence'] if e['id'] == derived['id'])
+        parent = row['lineage'][0]
+        self.page.locator('#source-drawer').get_by_role('link', name=parent['id'], exact=True).click()
+        self.page.wait_for_function("id => new URL(location.href).searchParams.get('selected_id') === id", arg=parent['id'])
+        self.page.wait_for_function("id => document.querySelector('#source-drawer code')?.textContent === id", arg=parent['id'])
+        self.assertEqual(embedded_view(self.page), headless(urlsplit(self.page.url).query))
+        self.assertEqual(embedded_view(self.page)['selection']['object_id'], parent['id'])
+
     def test_plain_html_fallback_remains_navigable_without_browser_javascript(self):
         context=self.browser.new_context(java_script_enabled=False)
         try:
@@ -230,6 +286,7 @@ class RealPhoenixConsumerTests(unittest.TestCase):
         self.assertNotEqual(first.evaluate('(e)=>getComputedStyle(e).outlineStyle'), 'none')
         self.assertEqual(self.page.locator('a[href*="grand"]').count(), 0)
         self.page.set_viewport_size({'width': 390, 'height': 760})
+        self.page.wait_for_function('document.documentElement.scrollWidth<=innerWidth+1', timeout=2000)
         self.assertFalse(self.page.evaluate('document.documentElement.scrollWidth>innerWidth+1'))
         self.page.emulate_media(reduced_motion='reduce')
         self.assertTrue(self.page.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches"))

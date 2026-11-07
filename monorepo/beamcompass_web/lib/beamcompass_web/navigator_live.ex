@@ -13,10 +13,22 @@ defmodule BeamCompassWeb.NavigatorLive do
   def mount(_params, _session, socket) do
     case NavigatorSource.load() do
       {:ok, snapshot} ->
-        {:ok, assign(socket, snapshot: snapshot, revisions: NavigatorSource.revisions(snapshot), view: nil, diagnostic: nil)}
+        {:ok,
+         assign(socket,
+           snapshot: snapshot,
+           revisions: NavigatorSource.revisions(snapshot),
+           view: nil,
+           diagnostic: nil
+         )}
 
       {:error, reason} ->
-        {:ok, assign(socket, snapshot: nil, revisions: [], view: nil, diagnostic: Atom.to_string(reason))}
+        {:ok,
+         assign(socket,
+           snapshot: nil,
+           revisions: [],
+           view: nil,
+           diagnostic: Atom.to_string(reason)
+         )}
     end
   end
 
@@ -189,7 +201,8 @@ defmodule BeamCompassWeb.NavigatorLive do
     """
   end
 
-  defp encode_view(view), do: view |> BeamCompass.Json.encode() |> Base.url_encode64(padding: false)
+  defp encode_view(view),
+    do: view |> BeamCompass.Json.encode() |> Base.url_encode64(padding: false)
 
   defp revision_href(view, revision) do
     "?" <>

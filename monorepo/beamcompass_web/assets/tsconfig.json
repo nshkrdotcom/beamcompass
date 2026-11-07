@@ -1,9 +1,21 @@
 {
   "compilerOptions": {
-    "target": "ES2022", "module": "ES2022", "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"], "strict": true,
-    "skipLibCheck": false, "declaration": false,
-    "rootDir": "ts", "outDir": "../priv/static"
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true,
+    "skipLibCheck": false,
+    "declaration": false,
+    "rootDir": ".",
+    "outDir": "../priv/static"
   },
-  "include": ["ts/stage.ts"]
+  "include": [
+    "ts/stage.ts",
+    "js/app.ts"
+  ]
 }

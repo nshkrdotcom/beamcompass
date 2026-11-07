@@ -3,7 +3,8 @@ import Config
 # Not a production secret: the default endpoint does NOT listen on a socket.
 # When serving locally, runtime.exs mandates a user-supplied high-entropy secret.
 config :beamcompass_web, BeamCompassWeb.Endpoint,
-  url: [host: "localhost"],
+  adapter: Bandit.PhoenixAdapter,
+  url: [host: "127.0.0.1"],
   http: [ip: {127, 0, 0, 1}, port: 4115],
   secret_key_base: String.duplicate("0", 64),
   server: false,

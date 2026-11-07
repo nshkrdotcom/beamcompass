@@ -15,3 +15,5 @@
 # Generated analysis artifacts
 output/
 *.tmp
+# Installed browser build dependencies
+**/node_modules/
