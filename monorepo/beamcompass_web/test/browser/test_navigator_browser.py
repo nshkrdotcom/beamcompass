@@ -111,6 +111,17 @@ class BrowserAcceptance(unittest.TestCase):
         self.assertEqual(self.page.locator('a.stage-card').count(),0)
         self.assertIn('receipt',self.page.get_by_role('alert').inner_text().lower())
 
+    def test_decorative_canvas_cannot_overflow_before_resize_observer_redraw(self):
+        self.page.wait_for_function("document.querySelector('canvas').width > 500")
+        dimensions = self.page.evaluate('''() => {
+            document.querySelector('.navigator-layout').style.maxWidth = '900px';
+            const host = document.querySelector('#semantic-stage').getBoundingClientRect();
+            const canvas = document.querySelector('canvas').getBoundingClientRect();
+            return {hostWidth: host.width, canvasWidth: canvas.width, right: canvas.right, hostRight: host.right};
+        }''')
+        self.assertLessEqual(dimensions['canvasWidth'], dimensions['hostWidth'] + 1)
+        self.assertLessEqual(dimensions['right'], dimensions['hostRight'] + 1)
+
     def test_mobile_no_horizontal_overflow_and_aria_landmarks(self):
         self.page.set_viewport_size({'width':390,'height':780})
         self.assertEqual(self.page.get_by_role('main').count(),1)

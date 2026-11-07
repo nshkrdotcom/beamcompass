@@ -28,7 +28,7 @@ code { color: #d0e7ff; overflow-wrap: anywhere; }
 .stage-kind { font-size: .66rem; letter-spacing: .09em; text-transform: uppercase; color: #a4cfed; }
 .stage-card strong { font-size: .92rem; }
 .stage-card small { color: #c4d5e4; font-size: .72rem; }
-.stage-connections { pointer-events: none; position: absolute; top: 0; left: 0; }
+.stage-connections { max-width: 100%; pointer-events: none; position: absolute; top: 0; left: 0; }
 #source-drawer { overflow-wrap: anywhere; }
 #source-drawer h3 { font-size: 1rem; }
 #source-drawer p, #source-drawer li { font-size: .82rem; }
