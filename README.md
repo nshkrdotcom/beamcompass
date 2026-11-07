@@ -1,10 +1,15 @@
 <p align="center">
-  <img src="assets/beamcompass.svg" alt="BeamCompass logo" width="160">
+  <img src="assets/beamcompass.svg" alt="BeamCompass logo" width="200">
 </p>
 
 # BeamCompass
 
-![Elixir 1.20.5](https://img.shields.io/badge/Elixir-1.20.5-4B275F) ![Erlang/OTP 29.1.2](https://img.shields.io/badge/Erlang%2FOTP-29.1.2-A90533)
+<p>
+  <img src="https://img.shields.io/badge/Elixir-1.20.5-4B275F" alt="Elixir 1.20.5">
+  <img src="https://img.shields.io/badge/Erlang%2FOTP-29.1.2-A90533" alt="Erlang/OTP 29.1.2">
+  <a href="https://github.com/nshkrdotcom/beamcompass"><img src="https://img.shields.io/badge/GitHub-BeamCompass-181717?logo=github" alt="GitHub repository"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
+</p>
 
 BeamCompass reads an Elixir/OTP codebase without running it. It identifies handlers, message sends, effect sites, possible state changes, and calls it cannot resolve. Each finding points back to the source.
 

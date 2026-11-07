@@ -1,10 +1,14 @@
 <p align="center">
-  <img src="assets/beamcompass_core.svg" alt="BeamCompass Core logo" width="160">
+  <img src="assets/beamcompass_core.svg" alt="BeamCompass Core logo" width="200">
 </p>
 
 # BeamCompass Core
 
-![Elixir 1.20.5](https://img.shields.io/badge/Elixir-1.20.5-4B275F) ![Erlang/OTP 29.1.2](https://img.shields.io/badge/Erlang%2FOTP-29.1.2-A90533)
+<p>
+  <img src="https://img.shields.io/badge/Elixir-1.20.5-4B275F" alt="Elixir 1.20.5">
+  <img src="https://img.shields.io/badge/Erlang%2FOTP-29.1.2-A90533" alt="Erlang/OTP 29.1.2">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License"></a>
+</p>
 
 BeamCompass Core reads Elixir/OTP source without running the inspected application. It can save a fact inventory or export a graph of entities, relations, and evidence. Both the Mix commands and Elixir API work without Phoenix.
 
