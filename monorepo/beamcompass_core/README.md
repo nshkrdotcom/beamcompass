@@ -29,7 +29,7 @@ current analysis guarantees.
 
 ## Getting started
 
-Requires Elixir 1.18 or later and a compatible Erlang/OTP release.
+Requires Elixir 1.20.5 or later and a compatible Erlang/OTP release.
 From this application's directory:
 
 ```sh

@@ -5,7 +5,7 @@ defmodule BeamCompassWeb.MixProject do
     [
       app: :beamcompass_web,
       version: "0.1.0",
-      elixir: "~> 1.18",
+      elixir: ">= 1.20.5",
       name: "BeamCompass Web",
       description:
         "Self-contained HTML reports for BeamCompass Elixir/OTP architecture analysis.",

@@ -35,7 +35,7 @@ There is intentionally **no root `mix.exs`** (Poncho layout).
 
 ## Local validation
 
-With Elixir >= 1.18 and an appropriate OTP version installed:
+With Elixir >= 1.20.5 and an appropriate OTP version installed:
 
 ```sh
 ./scripts/check.sh
@@ -44,9 +44,10 @@ With Elixir >= 1.18 and an appropriate OTP version installed:
 
 `check.sh` runs `mix deps.get`, formatting, compilation with warnings-as-errors,
 ExUnit, strict Credo, and Dialyzer in each independent project. P01B local
-verification uses Elixir 1.20.4 and Erlang/OTP 29.1.2. The minimum declared
-Elixir 1.18 compatibility has not been independently tested. See the separate
-authoritative docset for exact command results and remaining scope.
+verification used Elixir 1.20.4 and Erlang/OTP 29.1.2. The current minimum
+required Elixir version is 1.20.5; `.tool-versions` selects Elixir 1.20.5
+with Erlang/OTP 29.1.2 for asdf. See the separate authoritative docset for
+exact command results and remaining scope.
 
 ## Core API
 

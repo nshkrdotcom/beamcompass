@@ -5,7 +5,7 @@ defmodule BeamCompassCore.MixProject do
     [
       app: :beamcompass_core,
       version: "0.1.0",
-      elixir: "~> 1.18",
+      elixir: ">= 1.20.5",
       name: "BeamCompass Core",
       description:
         "Source-grounded behavioral architecture analysis for Elixir/OTP applications.",
