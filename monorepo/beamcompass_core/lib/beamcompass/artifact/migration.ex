@@ -37,14 +37,15 @@ defmodule BeamCompass.Artifact.Migration do
 
   @spec validate(map()) :: :ok | {:error, atom()}
   def validate(envelope) when is_map(envelope) do
-    expected = ~w(format schema_version source_format payload loss migration_status content_sha256)
+    expected =
+      ~w(format schema_version source_format payload loss migration_status content_sha256)
 
     cond do
       Enum.sort(Map.keys(envelope)) != Enum.sort(expected) ->
         {:error, :invalid_compatibility_envelope}
 
       envelope["format"] != @format or envelope["schema_version"] != @version or
-        envelope["source_format"] not in @types ->
+          envelope["source_format"] not in @types ->
         {:error, :unsupported_compatibility_version}
 
       envelope["migration_status"] != "lossless_transport_only" or envelope["loss"] != [] ->
@@ -67,7 +68,8 @@ defmodule BeamCompass.Artifact.Migration do
      %{
        "reason" => "source_reextraction_required",
        "loss" => ["v2_source_hashes", "v2_provider_identity", "v2_typed_lineage"],
-       "action" => "Re-scan original source with export_source/2 and new project_id; never claim recovered evidence"
+       "action" =>
+         "Re-scan original source with export_source/2 and new project_id; never claim recovered evidence"
      }}
   end
 
@@ -81,8 +83,13 @@ defmodule BeamCompass.Artifact.Migration do
   end
 
   def promote(_, _),
-    do: {:error, %{"reason" => "unsupported_artifact_version", "loss" => ["unknown"],
-                   "action" => "Read the documented supported version matrix"}}
+    do:
+      {:error,
+       %{
+         "reason" => "unsupported_artifact_version",
+         "loss" => ["unknown"],
+         "action" => "Read the documented supported version matrix"
+       }}
 
   defp wrap_payload(type, payload) do
     with :ok <- validate_payload(type, payload) do

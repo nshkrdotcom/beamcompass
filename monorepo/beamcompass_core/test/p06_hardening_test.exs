@@ -15,7 +15,12 @@ defmodule BeamCompass.P06HardeningTest do
 
     File.mkdir_p!(Path.join(root, "lib"))
     File.write!(Path.join(root, "mix.exs"), "raise \"untrusted target Mix must not run\"")
-    File.write!(Path.join(root, "lib/sample.ex"), "defmodule P06.Sample do\n def call, do: IO.puts(:ok)\nend\n")
+
+    File.write!(
+      Path.join(root, "lib/sample.ex"),
+      "defmodule P06.Sample do\n def call, do: IO.puts(:ok)\nend\n"
+    )
+
     on_exit(fn -> File.rm_rf!(root) end)
     {:ok, root: root}
   end
@@ -32,7 +37,7 @@ defmodule BeamCompass.P06HardeningTest do
       assert {:ok, snapshot} = BeamCompass.export_source(path, project_id: "p06:#{name}")
       assert snapshot["schema_version"] == 2
       assert snapshot["project_id"] == "p06:#{name}"
-      assert length(snapshot["entities"]) > 0
+      assert snapshot["entities"] != []
       assert Enum.all?(snapshot["evidence"], &(&1["mode"] == "source"))
       assert is_binary(snapshot["manifest"]["source_digest"])
     end
@@ -71,13 +76,22 @@ defmodule BeamCompass.P06HardeningTest do
              Safety.inventory([%{paths: Enum.map(1..2_001, &{&1, &1})}])
 
     assert {:error, {:unsafe_source_input, _, {:source_total_bytes_limit, _, _}}} =
-             Safety.read(Path.join(root, "lib/sample.ex"), "lib/sample.ex", Safety.limits()["max_total_bytes"])
+             Safety.read(
+               Path.join(root, "lib/sample.ex"),
+               "lib/sample.ex",
+               Safety.limits()["max_total_bytes"]
+             )
   end
 
   test "hostile target side effects remain absent under isolated source parsing", %{root: root} do
     marker = Path.join(root, "marker-do-not-create")
     File.mkdir_p!(Path.join(root, "config"))
-    File.write!(Path.join(root, "config/config.exs"), "File.write!(#{inspect(marker)}, \"config\")")
+
+    File.write!(
+      Path.join(root, "config/config.exs"),
+      "File.write!(#{inspect(marker)}, \"config\")"
+    )
+
     File.write!(Path.join(root, "mix.exs"), "File.write!(#{inspect(marker)}, \"mix\")")
 
     File.write!(Path.join(root, "lib/sample.ex"), """
@@ -136,7 +150,10 @@ defmodule BeamCompass.P06HardeningTest do
     assert {:ok, %{snapshot: v2, inputs: inputs}} = Export.scan(root, "p06:bad")
     assert {:ok, record} = Archive.put(v2, inputs, Path.join(root, "archive"))
     assert {:ok, bundle} = Archive.get(Path.join(root, "archive"), record["content_id"])
-    assert {:error, :unsupported_archive_version} = Archive.validate(%{bundle | "schema_version" => 3})
+
+    assert {:error, :unsupported_archive_version} =
+             Archive.validate(%{bundle | "schema_version" => 3})
+
     assert {:error, :archive_hash_mismatch} =
              Archive.validate(%{bundle | "content_id" => String.duplicate("0", 64)})
 
@@ -144,8 +161,13 @@ defmodule BeamCompass.P06HardeningTest do
     File.write!(secret, "do not read or overwrite")
     File.rm!(record["path"])
     File.ln_s!(secret, record["path"])
-    assert {:error, :unsafe_archive_file_type} = Archive.get(Path.join(root, "archive"), record["content_id"])
-    assert {:error, :unsafe_archive_file_type} = Archive.put(v2, inputs, Path.join(root, "archive"))
+
+    assert {:error, :unsafe_archive_file_type} =
+             Archive.get(Path.join(root, "archive"), record["content_id"])
+
+    assert {:error, :unsafe_archive_file_type} =
+             Archive.put(v2, inputs, Path.join(root, "archive"))
+
     assert File.read!(secret) == "do not read or overwrite"
     assert File.read!(Path.join(root, "v1.json")) == old
 
@@ -164,11 +186,13 @@ defmodule BeamCompass.P06HardeningTest do
   end
 
   test "release gate refuses unapproved thresholds and open high severity" do
-    assert {:error, %{ "blockers" => blockers}} = Policy.evaluate(measure(), nil, [])
+    assert {:error, %{"blockers" => blockers}} = Policy.evaluate(measure(), nil, [])
     assert "missing_owner_approved_thresholds" in blockers
 
     assert {:error, %{"blockers" => risk_blockers}} =
-             Policy.evaluate(measure(), synthetic_approval(), [%{"severity" => "critical", "status" => "open"}])
+             Policy.evaluate(measure(), synthetic_approval(), [
+               %{"severity" => "critical", "status" => "open"}
+             ])
 
     assert "open_high_severity_blocker" in risk_blockers
   end
@@ -178,8 +202,10 @@ defmodule BeamCompass.P06HardeningTest do
     assert {:ok, result} = Policy.evaluate(measure(), synthetic_approval(), [])
     assert result["release_eligible"] == true
     assert is_binary(result["measurement_fingerprint"])
+
     assert {:error, %{"blockers" => limits}} =
              Policy.evaluate(%{measure() | "wall_ms" => 10_000}, synthetic_approval(), [])
+
     assert "budget_exceeded:wall_ms" in limits
   end
 
@@ -190,10 +216,13 @@ defmodule BeamCompass.P06HardeningTest do
 
     assert {:error, %{"blockers" => source}} =
              Policy.evaluate(%{measure() | "source_mode" => "observed"}, synthetic_approval(), [])
+
     assert "missing_or_untrusted_measurements" in source
   end
 
-  test "old supported snapshot migration envelopes rehydrate with no fabricated provenance", %{root: root} do
+  test "old supported snapshot migration envelopes rehydrate with no fabricated provenance", %{
+    root: root
+  } do
     old = legacy()
     assert {:ok, envelope} = Migration.wrap(old)
     assert envelope["loss"] == []
@@ -206,21 +235,77 @@ defmodule BeamCompass.P06HardeningTest do
     assert wrapped_v2["source_format"] == "v2_snapshot"
   end
 
-  test "v2 promotion and corrupted compatibility envelopes refuse without data loss", %{root: root} do
+  test "v2 promotion and corrupted compatibility envelopes refuse without data loss", %{
+    root: root
+  } do
     old = legacy()
     assert {:ok, wrapped} = Migration.wrap(old)
+
     assert {:error, %{"reason" => "source_reextraction_required", "loss" => loss}} =
              Migration.promote(old, 2)
+
     assert "v2_source_hashes" in loss
 
     assert {:ok, %{snapshot: v2}} = Export.scan(root, "p06:no-downgrade")
     assert {:error, %{"reason" => "semantic_downgrade_unsupported"}} = Migration.promote(v2, 1)
+
     assert {:error, :compatibility_hash_mismatch} =
              Migration.rehydrate(%{wrapped | "content_sha256" => String.duplicate("f", 64)})
+
     assert {:error, :unacknowledged_migration_loss} =
              Migration.rehydrate(%{wrapped | "loss" => ["unknown-fields"]})
 
     assert {:ok, ^old} = Migration.rehydrate(wrapped)
+  end
+
+  test "parser heap exhaustion and worker crashes refuse without killing caller" do
+    assert {:error, {:parser_worker_failed, :killed}} =
+             Safety.run(fn -> Enum.to_list(1..8_000_000) end, 5_000)
+
+    assert {:error, {:parser_worker_failed, :injected_worker_fault}} =
+             Safety.run(fn -> exit(:injected_worker_fault) end)
+
+    assert {:ok, :still_alive} = Safety.run(fn -> :still_alive end)
+  end
+
+  test "source ancestor links and Mix links are refused", %{root: root} do
+    File.rename!(Path.join(root, "lib"), Path.join(root, "real-lib"))
+    File.ln_s!(Path.join(root, "real-lib"), Path.join(root, "lib"))
+    assert {:error, _} = BeamCompass.export_source(root, project_id: "p06:linked-lib")
+    File.rm!(Path.join(root, "lib"))
+    File.rename!(Path.join(root, "real-lib"), Path.join(root, "lib"))
+    File.rename!(Path.join(root, "mix.exs"), Path.join(root, "real-mix.exs"))
+    File.ln_s!(Path.join(root, "real-mix.exs"), Path.join(root, "mix.exs"))
+    assert {:error, _} = BeamCompass.export_source(root, project_id: "p06:linked-mix")
+  end
+
+  test "permission and sparse oversize archive faults preserve valid prior bytes", %{root: root} do
+    prior = Path.join(root, "prior.json")
+    assert :ok = BeamCompass.save(legacy(), prior)
+    old = File.read!(prior)
+    assert {:ok, %{snapshot: snapshot, inputs: inputs}} = Export.scan(root, "p06:permissions")
+    assert {:ok, record} = Archive.put(snapshot, inputs, Path.join(root, "archive"))
+    archive_bytes = File.read!(record["path"])
+
+    File.chmod!(record["path"], 0o000)
+
+    try do
+      assert {:error, :eacces} = Archive.get(Path.join(root, "archive"), record["content_id"])
+    after
+      File.chmod!(record["path"], 0o600)
+    end
+
+    assert File.read!(record["path"]) == archive_bytes
+
+    sparse = Path.join(root, "oversize.json")
+    {:ok, file} = :file.open(String.to_charlist(sparse), [:write, :binary])
+    {:ok, _} = :file.position(file, {:bof, 64 * 1024 * 1024})
+    :ok = :file.write(file, <<0>>)
+    :ok = :file.close(file)
+    assert {:error, :snapshot_size_limit} = BeamCompass.load(sparse)
+    assert {:ok, _} = BeamCompass.load(prior)
+    assert File.read!(prior) == old
+    assert {:ok, _} = Archive.get(Path.join(root, "archive"), record["content_id"])
   end
 
   defp legacy do

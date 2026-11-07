@@ -51,7 +51,7 @@ defmodule BeamCompass.Source.Safety do
     end
   end
 
-  @spec run((() -> term()), pos_integer()) :: {:ok, term()} | {:error, term()}
+  @spec run((-> term()), pos_integer()) :: {:ok, term()} | {:error, term()}
   def run(fun, timeout_ms \\ @parse_timeout_ms)
       when is_function(fun, 0) and is_integer(timeout_ms) and timeout_ms > 0 do
     caller = self()
@@ -85,5 +85,7 @@ defmodule BeamCompass.Source.Safety do
     do: {:error, {:source_file_bytes_limit, relative, size, @max_file_bytes}}
 
   defp within_total_limit(total) when total <= @max_total_bytes, do: :ok
-  defp within_total_limit(total), do: {:error, {:source_total_bytes_limit, total, @max_total_bytes}}
+
+  defp within_total_limit(total),
+    do: {:error, {:source_total_bytes_limit, total, @max_total_bytes}}
 end

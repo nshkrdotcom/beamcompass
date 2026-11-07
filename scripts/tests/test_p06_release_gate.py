@@ -1,5 +1,8 @@
 """Explicit fixture-only tests, never imply owner approval of production targets."""
 import sys
+import json
+import subprocess
+import tempfile
 from pathlib import Path
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -46,6 +49,24 @@ class P06ReleaseGateTests(unittest.TestCase):
         profile, recovery, owner = samples()
         owner['max_wall_ms'] = 1
         self.assertIn('wall_budget_exceeded:a', gate.evaluate(profile, recovery, owner, 'risk register\n')['blockers'])
+
+    def test_missing_approval_reports_open_risk_in_real_cli(self):
+        profile, recovery, _ = samples()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'profile.json').write_text(json.dumps(profile))
+            (root / 'recovery.json').write_text(json.dumps(recovery))
+            (root / 'risks.md').write_text(
+                '| RISK-001 | False confidence | Critical | Mitigate | owner | Active |')
+            result = subprocess.run([sys.executable, str(Path(gate.__file__)),
+                '--profile', str(root / 'profile.json'), '--recovery', str(root / 'recovery.json'),
+                '--approval', str(root / 'absent.json'), '--risks', str(root / 'risks.md'),
+                '--out', str(root / 'decision.json')], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            decision = json.loads((root / 'decision.json').read_text())
+            self.assertFalse(decision['eligible'])
+            self.assertIn('owner_approved_numeric_budgets_absent', decision['blockers'])
+            self.assertIn('open_high_severity:RISK-001', decision['blockers'])
 
 
 if __name__ == '__main__':

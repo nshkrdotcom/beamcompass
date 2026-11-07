@@ -15,7 +15,6 @@ import os
 import subprocess
 import sys
 import time
-import resource
 
 
 def digest(data: bytes) -> str:
@@ -99,6 +98,8 @@ def peak_rss(pid: int) -> int | None:
 def invoke(cmd: list[str], cwd: Path, timeout: float = 180.0) -> dict:
     start = time.monotonic_ns()
     rss = []
+    sampled_process_names = set()
+    beam_rss = []
     try:
         process = subprocess.Popen(cmd, cwd=cwd, text=True, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, start_new_session=True)
@@ -112,6 +113,13 @@ def invoke(cmd: list[str], cwd: Path, timeout: float = 180.0) -> dict:
             memory = peak_rss(process.pid)
             if memory is not None:
                 rss.append(memory)
+                try:
+                    process_name = Path(f"/proc/{process.pid}/comm").read_text().strip()
+                    sampled_process_names.add(process_name)
+                    if process_name.startswith("beam"):
+                        beam_rss.append(memory)
+                except OSError:
+                    pass
             time.sleep(0.01)
         if process.poll() is None:
             import signal
@@ -127,7 +135,10 @@ def invoke(cmd: list[str], cwd: Path, timeout: float = 180.0) -> dict:
     return {"command": cmd, "cwd": str(cwd), "exit_code": 124 if timed_out else process.returncode,
             "stdout": stdout, "stderr": stderr, "elapsed_ms": round((time.monotonic_ns() - start) / 1_000_000, 3),
             "peak_rss_bytes_sampled": max(rss, default=None), "rss_samples": len(rss),
-            "rss_sampling_interval_ms": 10, "rss_is_exact_peak": False}
+            "rss_sampling_interval_ms": 10, "rss_is_exact_peak": False,
+            "sampled_process_names": sorted(sampled_process_names),
+            "beam_rss_samples": len(beam_rss),
+            "beam_peak_rss_bytes_sampled": max(beam_rss, default=None)}
 
 
 def run(source_root: Path, docset_root: Path, out: Path, inventory_only: bool,
@@ -138,7 +149,9 @@ def run(source_root: Path, docset_root: Path, out: Path, inventory_only: bool,
     report = {"format": "beamcompass.p06-corpus-profile", "source_mode": "source",
               "corpus_provenance": catalog["provenance"], "corpora": observed,
               "status": "inventory_only_not_exporter_acceptance", "acceptance_passed": False,
-              "limitations": ["Two first-party projects plus one controlled fixture; no independent third-party provenance",
+              "limitations": [("Two first-party apps, controlled ledger fixture and acquired independent source project"
+                               if external_root is not None else
+                               "Two first-party projects plus one controlled fixture; no independent third-party provenance"),
                               "Measured Python inventory wall-time is NOT BEAM exporter wall-time or release SLO",
                               "Sampled /proc VmRSS may miss transient process peaks and child processes"]}
     out.mkdir(parents=True, exist_ok=True)

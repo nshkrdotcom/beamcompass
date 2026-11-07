@@ -76,14 +76,31 @@ def main():
     for name in ('profile', 'recovery', 'approval', 'risks', 'out'):
         p.add_argument('--' + name, required=True, type=Path)
     args = p.parse_args()
+    errors = []
+
+    def read_input(path, fallback, json_input=True):
+        try:
+            value = json.loads(path.read_text()) if json_input else path.read_text()
+            if json_input and not isinstance(value, dict):
+                raise ValueError('expected JSON object')
+            return value
+        except (OSError, ValueError, TypeError) as exc:
+            errors.append('unavailable_or_malformed_gate_input:' + str(exc))
+            return fallback
+
+    profile = read_input(args.profile, {})
+    recovery = read_input(args.recovery, {})
+    approval = read_input(args.approval, None)
+    risks = read_input(args.risks, '', json_input=False)
     try:
-        profile = json.loads(args.profile.read_text())
-        recovery = json.loads(args.recovery.read_text())
-        approval = json.loads(args.approval.read_text())
-        result = evaluate(profile, recovery, approval, args.risks.read_text())
-    except (OSError, ValueError, TypeError) as e:
+        result = evaluate(profile, recovery, approval, risks)
+    except (ValueError, TypeError, KeyError) as exc:
         result = {'format': 'beamcompass.p06-release-decision', 'schema_version': 1,
-                  'status': 'refused', 'eligible': False, 'blockers': ['unavailable_or_malformed_gate_input:' + str(e)]}
+                  'status': 'refused', 'eligible': False,
+                  'blockers': ['malformed_gate_measurements:' + str(exc)]}
+    if errors:
+        result['blockers'] = sorted(set(result['blockers'] + errors))
+        result.update(status='refused', eligible=False)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
     print(json.dumps(result, sort_keys=True))

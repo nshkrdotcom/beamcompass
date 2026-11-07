@@ -85,9 +85,16 @@ defmodule BeamCompass.Source.Provenance do
       end)
 
     case parsed do
-      {:ok, result} -> Map.merge(Map.delete(source, :bytes), result)
+      {:ok, result} ->
+        Map.merge(Map.delete(source, :bytes), result)
+
       {:error, reason} ->
-        Map.merge(Map.delete(source, :bytes), %{facts: [], hints: [], issue: inspect(reason), fatal_error: reason})
+        Map.merge(Map.delete(source, :bytes), %{
+          facts: [],
+          hints: [],
+          issue: inspect(reason),
+          fatal_error: reason
+        })
     end
   end
 

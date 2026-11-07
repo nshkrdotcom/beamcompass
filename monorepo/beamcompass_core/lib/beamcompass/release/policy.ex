@@ -46,7 +46,8 @@ defmodule BeamCompass.Release.Policy do
 
   defp missing_approval(errors, %{"approved" => true, "owner" => owner} = approval)
        when is_binary(owner) and byte_size(owner) > 0 do
-    if Enum.all?(@thresholds, fn key -> numeric?(approval[key]) end), do: errors,
+    if Enum.all?(@thresholds, fn key -> numeric?(approval[key]) end),
+      do: errors,
       else: ["missing_owner_approved_thresholds" | errors]
   end
 
@@ -56,18 +57,27 @@ defmodule BeamCompass.Release.Policy do
     cond do
       Enum.any?(findings, fn
         %{"severity" => severity, "status" => status}
-        when severity in ["high", "critical"] and status != "closed" -> true
-        _ -> false
-      end) -> ["open_high_severity_blocker" | errors]
+        when severity in ["high", "critical"] and status != "closed" ->
+          true
+
+        _ ->
+          false
+      end) ->
+        ["open_high_severity_blocker" | errors]
 
       not Enum.all?(findings, fn
         %{"severity" => severity, "status" => status}
         when severity in ["low", "medium", "high", "critical"] and
-               status in ["open", "active", "closed", "resolved"] -> true
-        _ -> false
-      end) -> ["invalid_risk_register" | errors]
+               status in ["open", "active", "closed", "resolved"] ->
+          true
 
-      true -> errors
+        _ ->
+          false
+      end) ->
+        ["invalid_risk_register" | errors]
+
+      true ->
+        errors
     end
   end
 
@@ -79,8 +89,8 @@ defmodule BeamCompass.Release.Policy do
     |> Enum.reduce(errors, fn {measured_key, cap}, acc ->
       if numeric?(measured[measured_key]) and numeric?(approval[cap]) and
            measured[measured_key] > approval[cap],
-        do: ["budget_exceeded:" <> measured_key | acc],
-        else: acc
+         do: ["budget_exceeded:" <> measured_key | acc],
+         else: acc
     end)
   end
 
@@ -90,5 +100,6 @@ defmodule BeamCompass.Release.Policy do
 
   defp valid_corpora?(ids) when is_list(ids),
     do: length(Enum.uniq(ids)) >= 3 and Enum.all?(ids, &(is_binary(&1) and byte_size(&1) > 0))
+
   defp valid_corpora?(_), do: false
 end

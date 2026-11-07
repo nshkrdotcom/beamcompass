@@ -185,18 +185,32 @@ def run(source_root, docset_root, out):
                     report['archive_content_sha256'] = digest(valid)
                     ok = ok and path.read_bytes() == valid and secret.read_bytes() == b'keep-private-prior'
         if ok:
-            # Inject genuine failing trusted CLI source acquisition before its
-            # output writer can execute; the previous v1 bytes stay untouched.
-            bad_root = temp / 'nonexistent-target'
-            row = record(['mix','beamcompass.scan',str(bad_root),'--out',str(v1)], {},
-                         'source-fault-writer-does-not-destroy-prior', expected_exit=1)
-            if row['matched']:
-                begun = time.monotonic_ns()
-                recovery = record(['mix','run','-e',CHECK], {'P06_INPUT':str(v1),'P06_KIND':'v1',
-                                                            'P06_EXPECT':'accept'}, 'post-fault-old-v1-recovery')
-                report['recovery_ms'] = round((time.monotonic_ns()-begun)/1_000_000,3)
-                if not recovery['matched']:
-                    ok = False
+            # Faults affect temporary copies only. No destructive restoration:
+            # measure rereading the retained old valid artifacts after refusal.
+            recovery_times = {}
+            for kind, prior in [('v1', v1), ('v2', v2)]:
+                bad_root = temp / 'nonexistent-target'
+                if kind == 'v1':
+                    command = ['mix', 'beamcompass.scan', str(bad_root), '--out', str(prior)]
+                else:
+                    command = ['mix', 'beamcompass.export', str(bad_root), '--schema', '2',
+                               '--project-id', 'p06:fault', '--out', str(prior)]
+                row = record(command, {}, 'source-fault-preserves-prior-' + kind, expected_exit=1)
+                if row['matched']:
+                    begun = time.monotonic_ns()
+                    recovery = record(['mix', 'run', '-e', CHECK],
+                                      {'P06_INPUT': str(prior), 'P06_KIND': kind, 'P06_EXPECT': 'accept'},
+                                      'post-fault-old-' + kind + '-recovery')
+                    recovery_times[kind] = round((time.monotonic_ns() - begun) / 1_000_000, 3)
+                    if not recovery['matched']:
+                        ok = False
+            report['recovery_ms_by_artifact'] = recovery_times
+            report['recovery_ms'] = max(recovery_times.values()) if len(recovery_times) == 2 else None
+            report['recovery_operation'] = 'rehydrate retained valid prior data after rejected acquisition; no overwritten-data restore'
+        report['after_content_sha256'] = {
+            'old_v1': digest(v1.read_bytes()), 'old_v2': digest(v2.read_bytes()),
+            'stored_old_v1': digest((docset_root / V1).read_bytes()),
+            'stored_old_v2': digest((docset_root / V2).read_bytes())}
         report['previous_data_unchanged'] = (
             v1.read_bytes() == v1_bytes and v2.read_bytes() == v2_bytes and
             (docset_root / V1).read_bytes() == v1_bytes and (docset_root / V2).read_bytes() == v2_bytes)

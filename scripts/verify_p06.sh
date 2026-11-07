@@ -36,10 +36,31 @@ python3 -m unittest discover -s "$root/scripts/tests" -p 'test_*.py' \
   >"$P06_LOG_ROOT/source-python.log" 2>&1
 python3 "$root/scripts/p06_release.py" --source-root "$root" --check-reproducible \
   >"$P06_LOG_ROOT/release-reproducible.log" 2>&1
+# Fresh P06 outputs and wrappers are produced only by the trusted core.
+(cd "$root/monorepo/beamcompass_core" &&
+  mix beamcompass.scan "$root/fixtures/ledger_sample" --out "$P06_LOG_ROOT/p06-v1.json" &&
+  mix beamcompass.export "$root/fixtures/ledger_sample" --schema 2 --project-id p06:matrix \
+    --out "$P06_LOG_ROOT/p06-v2.json" &&
+  P06_MATRIX_ROOT="$P06_LOG_ROOT" mix run -e '
+    root = System.fetch_env!("P06_MATRIX_ROOT")
+    {:ok, v1} = BeamCompass.load(Path.join(root, "p06-v1.json"))
+    {:ok, v2} = JSON.decode(File.read!(Path.join(root, "p06-v2.json")))
+    for {version, payload} <- [{"v1", v1}, {"v2", v2}] do
+      {:ok, wrapped} = BeamCompass.wrap_compatibility(payload)
+      File.write!(Path.join(root, "p06-envelope-" <> version <> ".json"), BeamCompass.Json.encode(wrapped) <> "\n")
+    end') >"$P06_LOG_ROOT/p06-producers.log" 2>&1
 python3 "$P06_DOCSET_ROOT/tools/p06_consumer_matrix.py" \
+  --p06-v1 "$P06_LOG_ROOT/p06-v1.json" --p06-v2 "$P06_LOG_ROOT/p06-v2.json" \
+  --p06-envelope-v1 "$P06_LOG_ROOT/p06-envelope-v1.json" \
+  --p06-envelope-v2 "$P06_LOG_ROOT/p06-envelope-v2.json" \
   --out "$P06_LOG_ROOT/independent-consumer-matrix.json" \
   >"$P06_LOG_ROOT/independent-consumer-matrix.log" 2>&1
+# Independent provenance is mandatory; never replace it with a first-party fixture.
+: "${P06_EXTERNAL_PROJECT_ROOT:?P06 independent corpus path required}"
+: "${P06_EXTERNAL_PROVENANCE:?P06 factual origin/revision/license required}"
 python3 "$root/scripts/p06_corpus.py" --source-root "$root" \
+  --external-project-root "$P06_EXTERNAL_PROJECT_ROOT" \
+  --external-provenance "$P06_EXTERNAL_PROVENANCE" \
   --docset-root "$P06_DOCSET_ROOT" --out "$P06_LOG_ROOT/real-corpus" \
   >"$P06_LOG_ROOT/real-corpus.log" 2>&1
 # Genuine old-v1/old-v2 and content-addressed archive corruption/recovery

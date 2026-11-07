@@ -19,11 +19,11 @@ defmodule BeamCompass do
   }
 
   alias BeamCompass.Artifact.Migration
-  alias BeamCompass.Release.Policy
   alias BeamCompass.Behavior.{Archive, Export, Validator}
   alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id
   alias BeamCompass.Model.{Snapshot, Store}
+  alias BeamCompass.Release.Policy
   alias BeamCompass.Source.{Discovery, Safety, Scanner}
 
   @spec scan(String.t()) :: {:ok, Snapshot.t()} | {:error, term()}
