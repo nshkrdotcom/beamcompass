@@ -9,7 +9,7 @@
 
 # BeamCompass
 
-**P01B verified baseline; P02A typed v2 source implementation awaiting local P02B checks.**
+**P04B runtime verified; P05A Phoenix navigator source implemented pending local measured gates.**
 
 BeamCompass is an Elixir/OTP behavioral architecture navigator. It constructs
 source-grounded facts, conservative effect and intent candidates, provisional
@@ -23,10 +23,10 @@ work and are not asserted by current output.
 ## Structure
 
 - `monorepo/beamcompass_core/`: independent Mix app, core API, scanner, snapshot codec,
-  basic projections, CLI and ExUnit suite.
+  v2 projections and snapshot-aware source navigator, CLI and ExUnit suite.
 - `monorepo/beamcompass_web/`: independent Mix app depending only on the core through a
-  path dependency; currently produces static HTML reports. Phoenix/LiveView is
-  explicitly deferred to P05.
+  path dependency; preserves static HTML reports alongside a P05A Phoenix/LiveView
+  source navigator (real server/browser acceptance pending local toolchain).
 - `fixtures/ledger_sample/`: small OTP application for regression tests.
 - `scripts/check.sh`: local quality gates for **both** Mix applications.
 - `scripts/demo.sh`: generate the ledger sample report.
@@ -74,7 +74,7 @@ mix beamcompass.report ../../fixtures/ledger_sample --out /tmp/beamcompass.html
 ```
 
 
-## P02A typed source-only export (source authored; local verification pending)
+## P02A typed source-only export (historical implementation; verified through P04B)
 
 P02A adds a separate v2 envelope, keeping the default v1 scanner, snapshot
 format, save/load calls, and web report unchanged. Example, from
@@ -103,9 +103,9 @@ a *syntactic effect call site*, not proof of runtime execution; intent tuples
 remain unresolved as to performer. Aliased/external calls may remain unknown.
 All target code, Mix scripts, macros and on_load remain unexecuted by the scan.
 
-This source implementation and its tests are **not yet runtime verified**:
-Elixir/Mix were unavailable for P02A; local P02B must run and fix both Mix app
-gates, the fresh-process export/consumer driver and source-safety acceptance.
+The v2 source contract was subsequently verified locally through P04B.
+The separate P05A LiveView/navigator implementation is not runtime-verified until
+its measured local P05 gates pass; see the web README and `scripts/verify_p05.sh`.
 
 ## Separate authoritative docset
 
@@ -142,3 +142,21 @@ unknowns and budget omissions are explicit, never inferred as runtime truth.
 This A archive has **not** run Mix/ExUnit/Credo/Dialyzer; P03B verifies/fixes
 against the operator-committed source and docs. See
 `impl_docs/contracts/projection.md` at the documented external docset location.
+
+### P05A standalone navigator source implementation
+
+The trusted `monorepo/beamcompass_web` app has a new Phoenix LiveView
+`/navigator` route and source-only TypeScript stage. All identities and
+preservation/uncertainty receipts are owned by
+`monorepo/beamcompass_core/lib/beamcompass/analysis/navigator.ex` and exported
+without Phoenix by `mix beamcompass.navigator`; v1 offline HTML reports remain
+available. See the web and core READMEs for setup and source-safety limits.
+`sh scripts/verify_p05.sh` is the strict local acceptance runner (Mix tests,
+Credo, Dialyzer and docs for both trusted siblings; npm build; actual live
+Chromium/headless/browser/a11y test). It requires the separately tracked parent
+docset specified in `P05_DOCSET_ROOT` and a full Elixir/npm/Chromium toolchain.
+The P05 source-only CI workflow runs trusted-app checks and real browser parity
+with `P05_SOURCE_CI_ONLY=1`, explicitly leaving external parent-docset gates
+unrun. The complete local release runner requires that separate docset; a green
+source CI run alone is never the P05A/P05B controller exit. No CI run is
+claimed by A.

@@ -8,7 +8,7 @@ defmodule BeamCompassWeb.MixProject do
       elixir: ">= 1.20.5",
       name: "BeamCompass Web",
       description:
-        "Self-contained HTML reports for BeamCompass Elixir/OTP architecture analysis.",
+        "Standalone Phoenix LiveView navigator and offline BeamCompass source reports.",
       source_url: "https://github.com/nshkrdotcom/beamcompass",
       homepage_url: "https://github.com/nshkrdotcom/beamcompass",
       package: package(),
@@ -19,7 +19,7 @@ defmodule BeamCompassWeb.MixProject do
   end
 
   def application do
-    [extra_applications: [:logger]]
+    [extra_applications: [:logger], mod: {BeamCompassWeb.Application, []}]
   end
 
   defp package do
@@ -33,7 +33,13 @@ defmodule BeamCompassWeb.MixProject do
         "README.md",
         "CHANGELOG.md",
         "LICENSE",
-        "assets/*"
+        "assets/js/*",
+        "assets/ts/*",
+        "assets/package.json",
+        "assets/package-lock.json",
+        "assets/tsconfig.json",
+        "priv/static/*",
+        "config/*"
       ]
     ]
   end
@@ -56,7 +62,7 @@ defmodule BeamCompassWeb.MixProject do
         {"Project", ["CHANGELOG.md", "LICENSE"]}
       ],
       groups_for_modules: [
-        {"Reports", [BeamCompassWeb.Report]},
+        {"Reports", [BeamCompassWeb.Report, BeamCompassWeb.NavigatorLive, BeamCompassWeb.NavigatorSource]},
         {"Mix tasks", ~r/^Mix.Tasks/}
       ]
     ]
@@ -74,6 +80,10 @@ defmodule BeamCompassWeb.MixProject do
     [
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       core_dependency(),
+      {:phoenix, "~> 1.8"},
+      {:phoenix_live_view, "~> 1.1"},
+      {:phoenix_html, "~> 4.2"},
+      {:plug_cowboy, "~> 2.7"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]

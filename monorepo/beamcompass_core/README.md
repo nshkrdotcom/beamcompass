@@ -128,3 +128,14 @@ explicit self-targeted handler pattern admits a `may_deliver_to` candidate.
 The v2 API rejects wrong versions and namespaces. The actual runtime test of
 this P03A implementation belongs to P03B; Elixir/Mix were unavailable during
 A authoring. See the accompanying docset `contracts/projection.md`.
+
+## P05 source-only navigator model (not runtime-verified in the A archive)
+
+`BeamCompass.navigator_view(v2_snapshot, query_map)` and
+`BeamCompass.Analysis.Navigator.from_query(v2_snapshot, encoded_query)` expose
+Phoenix-independent typed navigator semantics. `mix beamcompass.navigator
+SAVED_VALIDATED_V2.json --query 'lens=behavior&budget=16' --out VIEW.json`
+exports the same exact source view via a trusted core CLI without loading the
+web app or scanned target code. The v2 source namespace is mandatory; projection
+receipts/unknowns and start-only source anchors remain explicit. No Grand
+approval/proof policy is implemented. The existing v1 APIs remain intact.

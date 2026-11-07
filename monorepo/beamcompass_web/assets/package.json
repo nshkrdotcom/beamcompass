@@ -1,0 +1,19 @@
+{
+  "name": "beamcompass-web-assets",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "build": "esbuild js/app.ts --bundle --format=iife --target=es2022 --outfile=../priv/static/app.js --log-level=warning"
+  },
+  "dependencies": {
+    "phoenix": "~1.8.0",
+    "phoenix_live_view": "~1.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "~0.25.0",
+    "typescript": "~5.8.0",
+    "axe-core": "~4.10.3"
+  }
+}

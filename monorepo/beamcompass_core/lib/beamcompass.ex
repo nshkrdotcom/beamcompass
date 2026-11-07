@@ -196,6 +196,12 @@ defmodule BeamCompass do
   @spec benchmark_source(map(), list(map())) :: {:ok, map()} | {:error, term()}
   def benchmark_source(snapshot, oracles), do: QuestionAudit.benchmark(snapshot, oracles)
 
+  @doc "Strict source-only navigator view shared by LiveView and standalone consumers."
+  @spec navigator_view(map(), map()) :: {:ok, map()} | {:error, term()}
+  def navigator_view(source_snapshot_v2, query \\ %{}) do
+    BeamCompass.Analysis.Navigator.view(source_snapshot_v2, query)
+  end
+
   @spec inventory(Snapshot.t()) :: map()
   def inventory(%Snapshot{} = snapshot) do
     snapshot.facts
