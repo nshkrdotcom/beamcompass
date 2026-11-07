@@ -16,7 +16,7 @@ import zipfile
 
 SOURCE_DIRS = ("monorepo", "fixtures", "scripts", "assets", "corpora", ".github")
 SOURCE_FILES = ("README.md", ".tool-versions", ".editorconfig", "LICENSE", ".gitignore")
-EXCLUDE_PARTS = {".git", "_build", "deps", ".elixir_ls", "node_modules", "__pycache__", ".pytest_cache", "_archive", "tmp"}
+EXCLUDE_PARTS = {".git", "_build", "deps", ".elixir_ls", "node_modules", "__pycache__", ".pytest_cache", "_archive", "tmp", "doc", "cover", ".dialyzer"}
 EXCLUDE_SUFFIXES = (".pyc", ".beam", ".ez", ".log", ".tmp")
 TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 MAX_FILE_SIZE = 64 * 1024 * 1024

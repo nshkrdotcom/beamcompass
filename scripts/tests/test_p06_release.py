@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -33,6 +34,21 @@ class ReleaseReproducibilityTests(unittest.TestCase):
         self.assertEqual(a.read_bytes(), b.read_bytes())
         self.assertTrue(module.verify(a)["verified"])
         self.assertEqual(module.check_reproducibility(self.root)["rounds"], 2)
+
+    def test_independent_source_roots_ignore_generated_docs_and_analysis(self):
+        other = Path(self.tmp.name) / "independent-source"
+        shutil.copytree(self.root, other)
+        for root, content in [(self.root, "first machine"), (other, "second machine")]:
+            for directory in ("doc", "cover", ".dialyzer"):
+                path = root / "monorepo/core" / directory
+                path.mkdir()
+                (path / "generated.txt").write_text(content)
+        a, b = Path(self.tmp.name) / "a.zip", Path(self.tmp.name) / "b.zip"
+        self.assertEqual(module.build(self.root, a)["sha256"], module.build(other, b)["sha256"])
+        self.assertEqual(a.read_bytes(), b.read_bytes())
+        with zipfile.ZipFile(a) as archive:
+            self.assertFalse(any("generated.txt" in name for name in archive.namelist()))
+        self.assertTrue(module.verify(a)["verified"])
 
     def test_changed_source_bytes_change_digest_without_identity_confusion(self):
         a = Path(self.tmp.name) / "one.zip"
