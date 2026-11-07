@@ -104,3 +104,27 @@ MIX_ENV=prod mix hex.build
 ## License
 
 MIT — Copyright (c) 2026 nshkrdotcom. See [LICENSE](LICENSE).
+
+## P03A source-only causal capsules (pending local P03B Mix verification)
+
+`BeamCompass.capsules_source/1`, `BeamCompass.projection_request/2` and
+`BeamCompass.project_source/2` accept the **validated typed v2 source export**;
+existing v1 `scan`, `project`, `save`, `load` and schemas remain unchanged.
+
+```elixir
+{:ok, exported} = BeamCompass.export_source("../../fixtures/ledger_sample", project_id: "fixture:ledger")
+{:ok, request} = BeamCompass.projection_request(exported,
+  lens: :effects, budget: 12, boundaries: [:effect, :intent, :state, :async, :unknown])
+{:ok, projection} = BeamCompass.project_source(exported, request)
+{:ok, capsules} = BeamCompass.capsules_source(exported)
+```
+
+The bounded projections and capsules are syntax-based candidates with exact
+source-only reference expansion and preservation/omission/unknown receipts; they
+are **not** observed traces or proofs of causality or correct interpreter
+execution. The `budget` limits visible entity/relation refs (1–256), not capsule
+summary/evidence/receipt metadata. `sends` stays unresolved even when an
+explicit self-targeted handler pattern admits a `may_deliver_to` candidate.
+The v2 API rejects wrong versions and namespaces. The actual runtime test of
+this P03A implementation belongs to P03B; Elixir/Mix were unavailable during
+A authoring. See the accompanying docset `contracts/projection.md`.

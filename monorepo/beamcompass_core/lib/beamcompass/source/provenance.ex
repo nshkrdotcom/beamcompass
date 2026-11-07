@@ -2,7 +2,7 @@ defmodule BeamCompass.Source.Provenance do
   @moduledoc "Fresh, nonexecuting source bytes/parser context for v2. Never reconstructed from a v1 snapshot."
 
   alias BeamCompass.Json
-  alias BeamCompass.Source.Discovery
+  alias BeamCompass.Source.{BoundaryHints, CausalHints, Discovery}
   alias BeamCompass.Source.Providers.Quoted
 
   @settings %{
@@ -11,6 +11,7 @@ defmodule BeamCompass.Source.Provenance do
     "file_globs" => ["lib/**/*.ex", "lib/**/*.exs"],
     "layouts" => ["immediate-poncho", "monorepo-poncho", "standalone"],
     "mode" => "source",
+    "semantic_hints" => "p03a-source-boundaries-and-candidate-flow-v2",
     "parser" => "Code.string_to_quoted/2"
   }
 
@@ -63,10 +64,12 @@ defmodule BeamCompass.Source.Provenance do
   defp parse_source(source) do
     case Quoted.scan(source.bytes, source.path) do
       {:ok, facts} ->
-        Map.merge(Map.delete(source, :bytes), %{facts: facts, issue: nil})
+        additions = BoundaryHints.scan(source.bytes, source.path)
+        all = (facts ++ additions) |> Enum.uniq_by(& &1.id) |> Enum.sort_by(& &1.id)
+        Map.merge(Map.delete(source, :bytes), %{facts: all, hints: CausalHints.scan(source.bytes), issue: nil})
 
       {:error, reason} ->
-        Map.merge(Map.delete(source, :bytes), %{facts: [], issue: reason})
+        Map.merge(Map.delete(source, :bytes), %{facts: [], hints: [], issue: reason})
     end
   end
 

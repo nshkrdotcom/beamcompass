@@ -131,3 +131,13 @@ acceptance criteria, approvals and handoff status. Keep it in sync with code.
 - [Core application](monorepo/beamcompass_core/README.md) · [Core changelog](monorepo/beamcompass_core/CHANGELOG.md)
 - [Report application](monorepo/beamcompass_web/README.md) · [Report changelog](monorepo/beamcompass_web/CHANGELOG.md)
 - [MIT License](LICENSE) — Copyright (c) 2026 nshkrdotcom
+
+## P03A additive source-only projections
+
+Core now authors bounded, expandable source-possible causal capsules plus
+`projection_request/2` and `project_source/2`, based on verified v2 source
+exports without changing the v1 renderer/codec. Critical boundary preservation,
+unknowns and budget omissions are explicit, never inferred as runtime truth.
+This A archive has **not** run Mix/ExUnit/Credo/Dialyzer; P03B verifies/fixes
+against the operator-committed source and docs. See
+`impl_docs/contracts/projection.md` at the documented external docset location.

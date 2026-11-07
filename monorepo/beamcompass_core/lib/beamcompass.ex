@@ -5,7 +5,7 @@ defmodule BeamCompass do
   No target application code, mix.exs, supervisor or compiler is executed.
   """
 
-  alias BeamCompass.Analysis.{Capsules, Diff, Projector}
+  alias BeamCompass.Analysis.{Capsules, CausalCapsules, Diff, Projector, QuestionAudit, SourceProjection}
   alias BeamCompass.Behavior.{Export, Validator}
   alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id
@@ -121,6 +121,31 @@ defmodule BeamCompass do
   @doc "Atomically persist a validated v2 export. `save/2` remains the v1 writer."
   @spec save_source(map(), String.t()) :: :ok | {:error, term()}
   def save_source(snapshot, path), do: SourceStore.write(snapshot, path)
+
+  @doc "Versioned typed preservation request for the source-only v2 export."
+  @spec projection_request(map(), keyword()) :: {:ok, map()} | {:error, term()}
+  def projection_request(snapshot, options \\ []), do: SourceProjection.request(snapshot, options)
+
+  @doc "Evidence-expandable bounded source-possible capsules, never runtime traces."
+  @spec capsules_source(map()) :: {:ok, list(map())} | {:error, term()}
+  def capsules_source(snapshot) do
+    case Validator.validate(snapshot) do
+      :ok -> {:ok, CausalCapsules.build(snapshot)}
+      error -> error
+    end
+  end
+
+  @doc "Project source v2 through a closed request with preservation/omission receipts."
+  @spec project_source(map(), map()) :: {:ok, map()} | {:error, term()}
+  def project_source(snapshot, request), do: SourceProjection.project(snapshot, request)
+
+  @doc "Answer a typed, source-scoped question using exact v2 relation/evidence refs."
+  @spec answer_source(map(), map()) :: {:ok, map()} | {:error, term()}
+  def answer_source(snapshot, question), do: QuestionAudit.answer(snapshot, question)
+
+  @doc "Score source-only question answers against an independently authored oracle."
+  @spec benchmark_source(map(), list(map())) :: {:ok, map()} | {:error, term()}
+  def benchmark_source(snapshot, oracles), do: QuestionAudit.benchmark(snapshot, oracles)
 
   @spec inventory(Snapshot.t()) :: map()
   def inventory(%Snapshot{} = snapshot) do
