@@ -20,11 +20,16 @@ defmodule BeamCompass.Analysis.SemanticWitness do
       |> Enum.uniq()
 
     valid = Map.new(edge_ids, &{&1, true})
-    relations = Enum.filter(snapshot["relations"], &(Map.has_key?(valid, &1["id"])))
+    relations = Enum.filter(snapshot["relations"], &Map.has_key?(valid, &1["id"]))
     roots = capsules |> Enum.map(& &1["trigger_id"]) |> Enum.uniq() |> Enum.sort()
     adjacency = adjacency(relations)
     records = Map.new(snapshot["entities"], &{"entity:" <> &1["id"], {"entity", &1}})
-    records = Map.merge(records, Map.new(snapshot["relations"], &{"relation:" <> &1["id"], {"relation", &1}}))
+
+    records =
+      Map.merge(
+        records,
+        Map.new(snapshot["relations"], &{"relation:" <> &1["id"], {"relation", &1}})
+      )
 
     Map.new(keys, fn key ->
       {kind, record} = Map.fetch!(records, key)
@@ -63,19 +68,21 @@ defmodule BeamCompass.Analysis.SemanticWitness do
 
   defp adjacency(relations) do
     relations
-    |> Enum.reduce(%{}, fn relation, acc ->
-      kind = relation["kind"]
-      source = relation["source_id"]
-      target = relation["target_id"]
-
-      if is_nil(target) or relation["resolution"] == "unresolved" do
-        acc
-      else
-        acc = if kind in @forward, do: add_edge(acc, source, target, relation["id"]), else: acc
-        if kind in @reverse_structural, do: add_edge(acc, target, source, relation["id"]), else: acc
-      end
-    end)
+    |> Enum.reduce(%{}, &link_adjacency/2)
     |> Map.new(fn {node, edges} -> {node, Enum.sort_by(edges, &{elem(&1, 1), elem(&1, 0)})} end)
+  end
+
+  defp link_adjacency(relation, acc) do
+    kind = relation["kind"]
+    source = relation["source_id"]
+    target = relation["target_id"]
+
+    if is_nil(target) or relation["resolution"] == "unresolved" do
+      acc
+    else
+      acc = if kind in @forward, do: add_edge(acc, source, target, relation["id"]), else: acc
+      if kind in @reverse_structural, do: add_edge(acc, target, source, relation["id"]), else: acc
+    end
   end
 
   defp add_edge(graph, from, to, relation_id) do
@@ -99,15 +106,17 @@ defmodule BeamCompass.Analysis.SemanticWitness do
         {seen, []}
       else
         Map.get(graph, node, [])
-        |> Enum.reduce({seen, []}, fn {next, relation_id}, {visited, pending} ->
-          if Map.has_key?(visited, next) do
-            {visited, pending}
-          else
-            {Map.put(visited, next, true), [{next, path ++ [relation_id]} | pending]}
-          end
-        end)
+        |> Enum.reduce({seen, []}, &enqueue(&1, &2, path))
       end
 
     walk(rest ++ Enum.reverse(queue), seen, goal, graph)
+  end
+
+  defp enqueue({next, relation_id}, {visited, pending}, path) do
+    if Map.has_key?(visited, next) do
+      {visited, pending}
+    else
+      {Map.put(visited, next, true), [{next, path ++ [relation_id]} | pending]}
+    end
   end
 end

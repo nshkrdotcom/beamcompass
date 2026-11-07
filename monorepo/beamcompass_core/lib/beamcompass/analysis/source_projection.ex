@@ -29,21 +29,14 @@ defmodule BeamCompass.Analysis.SourceProjection do
 
   @doc "Construct a closed typed request for a validated v2 source snapshot."
   @spec request(map(), keyword()) :: {:ok, map()} | {:error, term()}
-  def request(snapshot, options \\ []) when is_map(snapshot) and is_list(options) do
+  def request(snapshot, options \\ [])
+
+  def request(snapshot, options) when is_map(snapshot) and is_list(options) do
     with :ok <- Validator.validate(snapshot),
          :ok <- check_options(options),
          {:ok, lens} <- option_lens(Keyword.get(options, :lens, :behavior)),
          {:ok, boundaries} <- option_boundaries(Keyword.get(options, :boundaries, [])) do
-      preserve =
-        options
-        |> Keyword.get(:preserve, [])
-        |> then(fn refs ->
-          if is_list(refs) and Enum.all?(refs, &is_map/1) do
-            Enum.sort_by(refs, &ref_key/1)
-          else
-            refs
-          end
-        end)
+      preserve = sort_preserve(Keyword.get(options, :preserve, []))
 
       body = %{
         "format" => "beamcompass.projection.request",
@@ -81,27 +74,39 @@ defmodule BeamCompass.Analysis.SourceProjection do
   @spec validate_request(map(), term()) :: :ok | {:error, term()}
   def validate_request(snapshot, request) when is_map(request) do
     with :ok <- ensure(keys?(request, @request_fields), :invalid_projection_request),
-         :ok <- ensure(request["format"] == "beamcompass.projection.request", :unsupported_projection_format),
+         :ok <-
+           ensure(
+             request["format"] == "beamcompass.projection.request",
+             :unsupported_projection_format
+           ),
          :ok <- ensure(request["schema_version"] === 1, :unsupported_projection_version),
          :ok <- ensure(request["snapshot_schema_version"] === 2, :unsupported_snapshot_version),
-         :ok <- ensure(request["project_id"] == snapshot["project_id"] and
-                          request["snapshot_id"] == snapshot["snapshot_id"], :wrong_projection_namespace),
+         :ok <-
+           ensure(
+             request["project_id"] == snapshot["project_id"] and
+               request["snapshot_id"] == snapshot["snapshot_id"],
+             :wrong_projection_namespace
+           ),
          :ok <- ensure(request["lens"] in @lenses, :unsupported_projection_lens),
-         :ok <- ensure(is_integer(request["budget"]) and
-                          request["budget"] > 0 and request["budget"] <= @limit,
-                        :invalid_projection_budget),
-         :ok <- check_focus(snapshot, request["focus"]),
-         :ok <- check_preserve(snapshot, request["preserve"]) do
-      :ok
+         :ok <-
+           ensure(
+             is_integer(request["budget"]) and
+               request["budget"] > 0 and request["budget"] <= @limit,
+             :invalid_projection_budget
+           ),
+         :ok <- check_focus(snapshot, request["focus"]) do
+      check_preserve(snapshot, request["preserve"])
     end
   end
 
   def validate_request(_, _), do: {:error, :invalid_projection_request}
 
   defp check_options(options) do
-    ensure(Keyword.keyword?(options) and
-             Keyword.keys(options) -- [:lens, :budget, :focus, :preserve, :boundaries] == [],
-           :invalid_projection_options)
+    ensure(
+      Keyword.keyword?(options) and
+        Keyword.keys(options) -- [:lens, :budget, :focus, :preserve, :boundaries] == [],
+      :invalid_projection_options
+    )
   end
 
   defp option_lens(lens) when is_atom(lens) do
@@ -136,18 +141,31 @@ defmodule BeamCompass.Analysis.SourceProjection do
 
   defp check_preserve(snapshot, preserve) do
     with :ok <- ensure(keys?(preserve, @preserve_fields), :invalid_projection_preserve),
-         :ok <- ensure(sorted_set?(preserve["boundaries"]) and
-                          Enum.all?(preserve["boundaries"], &(&1 in @boundaries)),
-                        :unsupported_preservation_boundary),
+         :ok <-
+           ensure(
+             sorted_set?(preserve["boundaries"]) and
+               Enum.all?(preserve["boundaries"], &(&1 in @boundaries)),
+             :unsupported_preservation_boundary
+           ),
          :ok <- ensure(is_list(preserve["references"]), :invalid_projection_preserve),
          :ok <- ensure(sorted_refs?(preserve["references"]), :invalid_projection_preserve) do
-      Enum.reduce_while(preserve["references"], :ok, fn ref, :ok ->
-        case check_reference(snapshot, ref) do
-          :ok -> {:cont, :ok}
-          error -> {:halt, error}
-        end
-      end)
+      check_references(snapshot, preserve["references"])
     end
+  end
+
+  defp sort_preserve(refs) do
+    if is_list(refs) and Enum.all?(refs, &is_map/1),
+      do: Enum.sort_by(refs, &ref_key/1),
+      else: refs
+  end
+
+  defp check_references(snapshot, refs) do
+    Enum.reduce_while(refs, :ok, fn ref, :ok ->
+      case check_reference(snapshot, ref) do
+        :ok -> {:cont, :ok}
+        error -> {:halt, error}
+      end
+    end)
   end
 
   defp check_reference(snapshot, ref) when is_map(ref) do
@@ -166,14 +184,14 @@ defmodule BeamCompass.Analysis.SourceProjection do
   defp sorted_refs?(refs) when is_list(refs) do
     if Enum.all?(refs, &is_map/1) do
       keys = Enum.map(refs, &ref_key/1)
-      keys == (keys |> Enum.uniq() |> Enum.sort())
+      keys == keys |> Enum.uniq() |> Enum.sort()
     else
       false
     end
   end
 
   defp sorted_refs?(_), do: false
-  defp sorted_set?(items) when is_list(items), do: items == (items |> Enum.uniq() |> Enum.sort())
+  defp sorted_set?(items) when is_list(items), do: items == items |> Enum.uniq() |> Enum.sort()
   defp sorted_set?(_), do: false
   defp keys?(map, keys) when is_map(map), do: Enum.sort(Map.keys(map)) == Enum.sort(keys)
   defp keys?(_, _), do: false
@@ -257,21 +275,27 @@ defmodule BeamCompass.Analysis.SourceProjection do
     end
   end
 
-  defp boundary?("relation", object, boundary, entities) do
-    case boundary do
-      "effect" -> object["kind"] == "performs_effect"
-      "intent" ->
-        object["kind"] == "describes_effect" or
-          (object["kind"] == "causally_related" and
-             entities[object["source_id"]]["kind"] == "effect_intent")
+  defp boundary?("relation", object, "intent", entities) do
+    object["kind"] == "describes_effect" or
+      (object["kind"] == "causally_related" and
+         entities[object["source_id"]]["kind"] == "effect_intent")
+  end
 
-      "state" -> object["kind"] in ~w(owns_state updates_state)
-      "async" -> object["kind"] in ~w(sends may_deliver_to potentially_concurrent occurs_before)
-      "failure" -> object["kind"] in ~w(supervises may_restart)
-      "unknown" -> object["resolution"] == "unresolved"
-      "trigger" -> object["kind"] == "handles"
-      _ -> false
-    end
+  defp boundary?("relation", object, "unknown", _entities),
+    do: object["resolution"] == "unresolved"
+
+  defp boundary?("relation", object, boundary, _entities) do
+    object["kind"] in Map.get(
+      %{
+        "effect" => ~w(performs_effect),
+        "state" => ~w(owns_state updates_state),
+        "async" => ~w(sends may_deliver_to potentially_concurrent occurs_before),
+        "failure" => ~w(supervises may_restart),
+        "trigger" => ~w(handles)
+      },
+      boundary,
+      []
+    )
   end
 
   defp lens_member?(_kind, _object, "behavior"), do: true
@@ -280,17 +304,25 @@ defmodule BeamCompass.Analysis.SourceProjection do
     do: object["kind"] in Map.fetch!(@entity_lenses, lens)
 
   defp lens_member?("relation", object, lens),
-    do: object["resolution"] == "unresolved" or
-      object["kind"] in Map.fetch!(@relation_lenses, lens)
+    do:
+      object["resolution"] == "unresolved" or
+        object["kind"] in Map.fetch!(@relation_lenses, lens)
 
   defp expand_capsule(snapshot, records, capsule) do
     %{
       "id" => capsule["id"],
       "trigger" => reference(snapshot, records, "entity:" <> capsule["trigger_id"]),
       "members" => refs(snapshot, records, Enum.map(capsule["entity_ids"], &("entity:" <> &1))),
-      "relations" => refs(snapshot, records, Enum.map(capsule["relation_ids"], &("relation:" <> &1))),
-      "unresolved" => refs(snapshot, records, Enum.map(capsule["unresolved_relation_ids"], &("relation:" <> &1))),
-      "cut_relations" => refs(snapshot, records, Enum.map(capsule["cut_relation_ids"], &("relation:" <> &1))),
+      "relations" =>
+        refs(snapshot, records, Enum.map(capsule["relation_ids"], &("relation:" <> &1))),
+      "unresolved" =>
+        refs(
+          snapshot,
+          records,
+          Enum.map(capsule["unresolved_relation_ids"], &("relation:" <> &1))
+        ),
+      "cut_relations" =>
+        refs(snapshot, records, Enum.map(capsule["cut_relation_ids"], &("relation:" <> &1))),
       "truncated" => capsule["truncated"],
       "coverage" => capsule["coverage"],
       "ordering" => capsule["ordering"]
@@ -302,7 +334,10 @@ defmodule BeamCompass.Analysis.SourceProjection do
   end
 
   defp receipt_entries(snapshot, records, keys, reason) do
-    Enum.map(Enum.sort(keys), &%{"reference" => reference(snapshot, records, &1), "reason" => reason})
+    Enum.map(
+      Enum.sort(keys),
+      &%{"reference" => reference(snapshot, records, &1), "reason" => reason}
+    )
   end
 
   # Source-visible records are never independently counted as a complete
@@ -318,23 +353,11 @@ defmodule BeamCompass.Analysis.SourceProjection do
     explicit = Enum.map(request["preserve"]["references"], &ref_key/1)
     boundaries = request["preserve"]["boundaries"]
 
-    boundary_hits =
-      Map.new(boundaries, fn boundary ->
-        hits =
-          Enum.filter(scoped, fn key ->
-            {kind, record} = Map.fetch!(records, key)
-            boundary?(kind, record, boundary, entity_index)
-          end)
-        {boundary, hits}
-      end)
+    boundary_hits = boundary_hits(boundaries, scoped, records, entity_index)
 
     critical = Enum.uniq(explicit ++ focus_key ++ Enum.flat_map(Map.values(boundary_hits), & &1))
 
-    eligible =
-      Enum.filter(scoped, fn key ->
-        {kind, record} = Map.fetch!(records, key)
-        lens_member?(kind, record, request["lens"])
-      end)
+    eligible = Enum.filter(scoped, &eligible?(&1, records, request["lens"]))
 
     priorities =
       (Enum.sort(Enum.uniq(explicit ++ focus_key)) ++
@@ -344,68 +367,27 @@ defmodule BeamCompass.Analysis.SourceProjection do
 
     plans = SemanticWitness.plan(snapshot, selected_capsules, priorities)
     selected = select_atomic(priorities, plans, request["budget"])
-    missing = Enum.sort(critical -- selected)
-    missing_boundaries = boundaries |> Enum.filter(&(boundary_hits[&1] == [])) |> Enum.sort()
-    witness_gaps = Enum.filter(critical, fn key ->
-      not plans[key].connected or Enum.any?(plans[key].members, &(&1 not in selected))
-    end)
-    cut = Enum.any?(selected_capsules, & &1["truncated"])
 
-    status =
-      if missing == [] and missing_boundaries == [] and witness_gaps == [] and not cut,
-        do: "satisfied", else: "unsatisfied"
+    missing =
+      Enum.filter(critical, &(witness_status(&1, plans[&1], selected) != "preserved"))
+      |> Enum.sort()
+
+    missing_boundaries = boundaries |> Enum.filter(&(boundary_hits[&1] == [])) |> Enum.sort()
+    status = preservation_status(critical, selected, plans, missing_boundaries, selected_capsules)
 
     summarized = Enum.flat_map(selected_capsules, &capsule_keys/1)
     collapsed = Enum.filter((eligible -- selected) -- critical, &(&1 in summarized))
     left = Map.keys(records) -- (selected ++ collapsed)
 
-    omitted =
-      Enum.map(left, fn key ->
-        reason =
-          cond do
-            key in critical or key in eligible -> "budget"
-            key in scoped -> "lens_filtered"
-            true -> "outside_focus"
-          end
-        %{"reference" => reference(snapshot, records, key), "reason" => reason}
-      end)
-      |> Enum.sort_by(&ref_key(&1["reference"]))
+    omitted = omitted_entries(snapshot, records, left, critical, eligible, scoped)
 
     unresolved =
       Enum.filter(Enum.uniq(scoped ++ explicit), fn key ->
         match?({"relation", %{"resolution" => "unresolved"}}, records[key])
       end)
 
-    completeness =
-      cond do
-        status == "unsatisfied" -> "incomplete_preservation"
-        snapshot["issues"] != [] -> "source_parse_issues"
-        unresolved != [] -> "bounded_source_with_unknowns"
-        true -> "bounded_source_only"
-      end
-
-    witnesses =
-      critical
-      |> Enum.sort()
-      |> Enum.map(fn key ->
-        plan = plans[key]
-        preserved = key in selected
-        situation =
-          cond do
-            not preserved -> "budget_lost"
-            not plan.connected -> "unconnected"
-            Enum.any?(plan.members, &(&1 not in selected)) -> "incomplete_witness"
-            true -> "preserved"
-          end
-
-        %{
-          "requested" => reference(snapshot, records, key),
-          "status" => situation,
-          "path" => refs(snapshot, records, plan.path),
-          "dependency_refs" => refs(snapshot, records, plan.members),
-          "path_supported" => plan.connected
-        }
-      end)
+    completeness = completeness(status, snapshot, unresolved)
+    witnesses = witnesses(snapshot, records, critical, plans, selected)
 
     %{
       "format" => "beamcompass.projection.result",
@@ -436,15 +418,92 @@ defmodule BeamCompass.Analysis.SourceProjection do
           "capsules" => length(selected_capsules),
           "scope_excluded" => length((Map.keys(records) -- scoped) -- selected)
         },
-        "limitations" => Enum.sort([
-          "AST paths are possible source witnesses, not runtime causality or message ordering",
-          "No exact source end spans, macro/dataflow proof or negative evidence of effect absence",
-          "Critical witness endpoints and links are admitted atomically under a record budget",
-          "Disconnected anchors and truncated routes cannot count as semantic preservation",
-          "Visible budget excludes expandable capsule metadata, unknowns and receipts"
-        ])
+        "limitations" =>
+          Enum.sort([
+            "AST paths are possible source witnesses, not runtime causality or message ordering",
+            "No exact source end spans, macro/dataflow proof or negative evidence of effect absence",
+            "Critical witness endpoints and links are admitted atomically under a record budget",
+            "Disconnected anchors and truncated routes cannot count as semantic preservation",
+            "Visible budget excludes expandable capsule metadata, unknowns and receipts"
+          ])
       }
     }
+  end
+
+  defp boundary_hits(boundaries, scoped, records, entities) do
+    Map.new(boundaries, fn boundary ->
+      hits =
+        Enum.filter(scoped, fn key ->
+          {kind, record} = Map.fetch!(records, key)
+          boundary?(kind, record, boundary, entities)
+        end)
+
+      {boundary, hits}
+    end)
+  end
+
+  defp eligible?(key, records, lens) do
+    {kind, record} = Map.fetch!(records, key)
+    lens_member?(kind, record, lens)
+  end
+
+  defp preservation_status(critical, selected, plans, missing_boundaries, capsules) do
+    gaps =
+      Enum.any?(critical, fn key ->
+        not plans[key].connected or Enum.any?(plans[key].members, &(&1 not in selected))
+      end)
+
+    if gaps or missing_boundaries != [] or Enum.any?(capsules, & &1["truncated"]),
+      do: "unsatisfied",
+      else: "satisfied"
+  end
+
+  defp omitted_entries(snapshot, records, left, critical, eligible, scoped) do
+    Enum.map(left, fn key ->
+      reason =
+        cond do
+          key in critical or key in eligible -> "budget"
+          key in scoped -> "lens_filtered"
+          true -> "outside_focus"
+        end
+
+      %{"reference" => reference(snapshot, records, key), "reason" => reason}
+    end)
+    |> Enum.sort_by(&ref_key(&1["reference"]))
+  end
+
+  defp completeness(status, snapshot, unresolved) do
+    cond do
+      status == "unsatisfied" -> "incomplete_preservation"
+      snapshot["issues"] != [] -> "source_parse_issues"
+      unresolved != [] -> "bounded_source_with_unknowns"
+      true -> "bounded_source_only"
+    end
+  end
+
+  defp witnesses(snapshot, records, critical, plans, selected) do
+    critical
+    |> Enum.sort()
+    |> Enum.map(fn key ->
+      plan = plans[key]
+
+      %{
+        "requested" => reference(snapshot, records, key),
+        "status" => witness_status(key, plan, selected),
+        "path" => Enum.map(plan.path, &reference(snapshot, records, &1)),
+        "dependency_refs" => refs(snapshot, records, plan.members),
+        "path_supported" => plan.connected
+      }
+    end)
+  end
+
+  defp witness_status(key, plan, selected) do
+    cond do
+      key not in selected -> "budget_lost"
+      not plan.connected -> "unconnected"
+      Enum.any?(plan.members, &(&1 not in selected)) -> "incomplete_witness"
+      true -> "preserved"
+    end
   end
 
   defp select_atomic(priorities, plans, limit) do

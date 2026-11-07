@@ -5,7 +5,15 @@ defmodule BeamCompass do
   No target application code, mix.exs, supervisor or compiler is executed.
   """
 
-  alias BeamCompass.Analysis.{Capsules, CausalCapsules, Diff, Projector, QuestionAudit, SourceProjection}
+  alias BeamCompass.Analysis.{
+    Capsules,
+    CausalCapsules,
+    Diff,
+    Projector,
+    QuestionAudit,
+    SourceProjection
+  }
+
   alias BeamCompass.Behavior.{Export, Validator}
   alias BeamCompass.Behavior.Store, as: SourceStore
   alias BeamCompass.Id

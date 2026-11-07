@@ -14,4 +14,7 @@ for project in beamcompass_core beamcompass_web; do
   )
 done
 
-(cd "$root/fixtures/ledger_sample" && mix format --check-formatted mix.exs "lib/**/*.ex")
+# Run the trusted formatter from core: entering the scanned target directory
+# would load its Mix project even for a format-only command.
+(cd "$root/monorepo/beamcompass_core" && mix format --check-formatted \
+  "$root/fixtures/ledger_sample/mix.exs" "$root/fixtures/ledger_sample/lib/**/*.ex")

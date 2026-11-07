@@ -37,19 +37,20 @@ defmodule BeamCompass.Analysis.QuestionAudit do
       results = Enum.map(oracles, &score(snapshot, &1))
       metrics = totals(results)
 
-      {:ok, %{
-        "format" => "beamcompass.question.benchmark",
-        "schema_version" => 1,
-        "snapshot_schema_version" => 2,
-        "project_id" => snapshot["project_id"],
-        "snapshot_id" => snapshot["snapshot_id"],
-        "results" => results,
-        "metrics" => metrics,
-        "limitations" => [
-          "Oracle is human-authored, source-scoped, and cannot establish runtime truth",
-          "Unknown means insufficient evidence, never that behavior is absent"
-        ]
-      }}
+      {:ok,
+       %{
+         "format" => "beamcompass.question.benchmark",
+         "schema_version" => 1,
+         "snapshot_schema_version" => 2,
+         "project_id" => snapshot["project_id"],
+         "snapshot_id" => snapshot["snapshot_id"],
+         "results" => results,
+         "metrics" => metrics,
+         "limitations" => [
+           "Oracle is human-authored, source-scoped, and cannot establish runtime truth",
+           "Unknown means insufficient evidence, never that behavior is absent"
+         ]
+       }}
     end
   end
 
@@ -69,25 +70,27 @@ defmodule BeamCompass.Analysis.QuestionAudit do
   defp validate_query(_), do: {:error, :invalid_source_question}
 
   defp validate_oracles(oracles) do
-    ids = Enum.map(oracles, fn entry ->
-      if is_map(entry) and is_map(entry["query"]), do: entry["query"]["id"], else: nil
-    end)
+    ids =
+      Enum.map(oracles, fn entry ->
+        if is_map(entry) and is_map(entry["query"]), do: entry["query"]["id"], else: nil
+      end)
 
     valid =
-      oracles != [] and ids == (ids |> Enum.uniq() |> Enum.sort()) and
-        Enum.all?(oracles, fn oracle ->
-          is_map(oracle) and Enum.sort(Map.keys(oracle)) == @oracle_keys and
-            validate_query(oracle["query"]) == :ok and
-            is_boolean(oracle["unknown_expected"]) and
-            sorted_text?(oracle["expected_targets"])
-        end)
+      oracles != [] and ids == ids |> Enum.uniq() |> Enum.sort() and
+        Enum.all?(oracles, &valid_oracle?/1)
 
     if valid, do: :ok, else: {:error, :invalid_question_oracles}
   end
 
+  defp valid_oracle?(oracle) do
+    is_map(oracle) and Enum.sort(Map.keys(oracle)) == @oracle_keys and
+      validate_query(oracle["query"]) == :ok and is_boolean(oracle["unknown_expected"]) and
+      sorted_text?(oracle["expected_targets"])
+  end
+
   defp sorted_text?(items) when is_list(items) do
     Enum.all?(items, &(is_binary(&1) and byte_size(&1) > 0)) and
-      items == (items |> Enum.uniq() |> Enum.sort())
+      items == items |> Enum.uniq() |> Enum.sort()
   end
 
   defp sorted_text?(_), do: false
@@ -97,23 +100,9 @@ defmodule BeamCompass.Analysis.QuestionAudit do
     relation_kind = Map.fetch!(@kinds, query["kind"])
 
     selected =
-      Enum.filter(snapshot["relations"], fn relation ->
-        source = entities[relation["source_id"]]
-        matches_source?(source, query) and
-          relation["kind"] == relation_kind and
-          relation["resolution"] != "unresolved" and
-          not is_nil(relation["target_id"]) and
-          (query["kind"] != "intent_interpreters" or source["kind"] == "effect_intent")
-      end)
+      Enum.filter(snapshot["relations"], &selected_relation?(&1, entities, query, relation_kind))
 
-    unknown =
-      Enum.filter(snapshot["relations"], fn relation ->
-        relation["resolution"] == "unresolved" and
-          (matches_source?(entities[relation["source_id"]], query) or
-             (query["kind"] == "intent_interpreters" and
-                String.starts_with?(entities[relation["source_id"]]["label"], query["subject"] <> " · "))) and
-          relevant_unknown?(relation["kind"], query["kind"])
-      end)
+    unknown = Enum.filter(snapshot["relations"], &unknown_relation?(&1, entities, query))
 
     state =
       cond do
@@ -126,18 +115,36 @@ defmodule BeamCompass.Analysis.QuestionAudit do
       "id" => query["id"],
       "question" => query,
       "status" => state,
-      "answers" => Enum.map(selected, fn relation ->
-        %{
-          "relation" => source_ref(snapshot, "relation", relation),
-          "source" => source_ref(snapshot, "entity", entities[relation["source_id"]]),
-          "target" => source_ref(snapshot, "entity", entities[relation["target_id"]]),
-          "target_label" => entities[relation["target_id"]]["label"],
-          "resolution" => relation["resolution"]
-        }
-      end),
+      "answers" =>
+        Enum.map(selected, fn relation ->
+          %{
+            "relation" => source_ref(snapshot, "relation", relation),
+            "source" => source_ref(snapshot, "entity", entities[relation["source_id"]]),
+            "target" => source_ref(snapshot, "entity", entities[relation["target_id"]]),
+            "target_label" => entities[relation["target_id"]]["label"],
+            "resolution" => relation["resolution"]
+          }
+        end),
       "unknown" => Enum.map(unknown, &source_ref(snapshot, "relation", &1)),
       "limitations" => ["Source syntax alone does not prove execution or absence"]
     }
+  end
+
+  defp selected_relation?(relation, entities, query, kind) do
+    source = entities[relation["source_id"]]
+
+    matches_source?(source, query) and relation["kind"] == kind and
+      relation["resolution"] != "unresolved" and not is_nil(relation["target_id"])
+  end
+
+  defp unknown_relation?(relation, entities, query) do
+    relation["resolution"] == "unresolved" and
+      unknown_source?(entities[relation["source_id"]], query) and
+      relevant_unknown?(relation["kind"], query["kind"])
+  end
+
+  defp unknown_source?(source, query) do
+    not is_nil(source) and String.starts_with?(source["label"], query["subject"] <> " · ")
   end
 
   defp matches_source?(source, query) do
@@ -187,7 +194,10 @@ defmodule BeamCompass.Analysis.QuestionAudit do
 
     false_positive = length(unmatched_targets)
     false_negative = length(expected) - true_positive
-    reported_unknown = answer["status"] in ["unknown", "source_possible"] or answer["unknown"] != []
+
+    reported_unknown =
+      answer["status"] in ["unknown", "source_possible"] or answer["unknown"] != []
+
     unknown_correct = reported_unknown == oracle["unknown_expected"]
 
     %{
@@ -207,10 +217,12 @@ defmodule BeamCompass.Analysis.QuestionAudit do
     tp = Enum.sum(Enum.map(results, & &1["true_positive"]))
     fp = Enum.sum(Enum.map(results, & &1["false_positive"]))
     fn_count = Enum.sum(Enum.map(results, & &1["false_negative"]))
-    unknown_count = Enum.count(results, fn item ->
-      item["answer"]["status"] in ["unknown", "source_possible"] or
-        item["answer"]["unknown"] != []
-    end)
+
+    unknown_count =
+      Enum.count(results, fn item ->
+        item["answer"]["status"] in ["unknown", "source_possible"] or
+          item["answer"]["unknown"] != []
+      end)
 
     %{
       "questions" => length(results),

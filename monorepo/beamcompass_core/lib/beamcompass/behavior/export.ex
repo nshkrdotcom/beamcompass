@@ -187,6 +187,7 @@ defmodule BeamCompass.Behavior.Export do
   defp entity_kind(%{kind: :handler}), do: "trigger"
   defp entity_kind(%{kind: :intent_candidate}), do: "effect_intent"
   defp entity_kind(%{kind: :effect_site}), do: "effect"
+  defp entity_kind(%{kind: :transition_candidate}), do: "transition"
   defp entity_kind(%{kind: :decision}), do: "decision"
   defp entity_kind(%{kind: :failure_boundary}), do: "failure_boundary"
 
@@ -329,17 +330,51 @@ defmodule BeamCompass.Behavior.Export do
     end)
   end
 
+  defp relations_for(%{fact: %{kind: :transition_candidate}} = entry, entries) do
+    with_function(entry, entries, fn function ->
+      [
+        relation(
+          "updates_state",
+          function,
+          entry,
+          entry,
+          "possible",
+          "proposed",
+          "literal tuple in a three-part return candidate; stored state and branch execution unverified"
+        )
+      ]
+    end)
+  end
+
   defp relations_for(%{fact: %{kind: :decision}} = entry, entries) do
     with_function(entry, entries, fn function ->
-      [relation("causally_related", function, entry, entry, "possible", "proposed",
-        "branch syntax within function; no branch outcome or execution order proven")]
+      [
+        relation(
+          "causally_related",
+          function,
+          entry,
+          entry,
+          "possible",
+          "proposed",
+          "branch syntax within function; no branch outcome or execution order proven"
+        )
+      ]
     end)
   end
 
   defp relations_for(%{fact: %{kind: :failure_boundary}} = entry, entries) do
     with_function(entry, entries, fn function ->
-      [relation("causally_related", function, entry, entry, "possible", "proposed",
-        "source failure/lifecycle syntax; no crash, catch or restart observed")]
+      [
+        relation(
+          "causally_related",
+          function,
+          entry,
+          entry,
+          "possible",
+          "proposed",
+          "source failure/lifecycle syntax; no crash, catch or restart observed"
+        )
+      ]
     end)
   end
 
@@ -347,7 +382,8 @@ defmodule BeamCompass.Behavior.Export do
     supervisor =
       Enum.filter(entries, fn item ->
         item.fact.kind == :role and item.path == entry.path and
-          item.fact.subject == fact.details["declaring_module"] and item.fact.object == "Supervisor"
+          item.fact.subject == fact.details["declaring_module"] and
+          item.fact.object == "Supervisor"
       end)
 
     child =
@@ -356,20 +392,7 @@ defmodule BeamCompass.Behavior.Export do
           item.fact.subject == fact.object
       end)
 
-    case supervisor do
-      [owner] ->
-        case child do
-          [target] ->
-            [relation("supervises", owner, target, entry, "possible", "proposed",
-               "literal Supervisor.init child entry; actual startup/child-spec semantics unverified"),
-             relation("may_restart", owner, target, entry, "possible", "proposed",
-               "static supervisor membership only; restart policy/occurrence unverified")]
-          _ ->
-            [relation("supervises", owner, nil, entry, "unresolved", "unresolved",
-               "literal child listed but unique local actor unavailable")]
-        end
-      _ -> []
-    end
+    supervisor_relations(supervisor, child, entry)
   end
 
   defp relations_for(%{fact: %{kind: :effect_site}} = entry, entries) do
@@ -501,6 +524,45 @@ defmodule BeamCompass.Behavior.Export do
 
   defp relations_for(_, _), do: []
 
+  defp supervisor_relations([owner], [target], entry) do
+    [
+      relation(
+        "supervises",
+        owner,
+        target,
+        entry,
+        "possible",
+        "proposed",
+        "literal Supervisor.init child entry; actual startup/child-spec semantics unverified"
+      ),
+      relation(
+        "may_restart",
+        owner,
+        target,
+        entry,
+        "possible",
+        "proposed",
+        "static supervisor membership only; restart policy/occurrence unverified"
+      )
+    ]
+  end
+
+  defp supervisor_relations([owner], _, entry) do
+    [
+      relation(
+        "supervises",
+        owner,
+        nil,
+        entry,
+        "unresolved",
+        "unresolved",
+        "literal child listed but unique local actor unavailable"
+      )
+    ]
+  end
+
+  defp supervisor_relations(_, _, _), do: []
+
   # Candidate-only flow: an alias-resolved reducer call inside a sender, a
   # uniquely pattern-matched message handler, and an Enum.each function capture
   # are all required. A tag by itself is NEVER enough to select an executor.
@@ -509,31 +571,7 @@ defmodule BeamCompass.Behavior.Export do
     relations = Enum.map(pairs, &elem(&1, 0))
     by_id = Map.new(entries, &{if(is_nil(&1.entity), do: nil, else: &1.entity.id), &1})
 
-    candidate_paths =
-      for from_call <- relations,
-          from_call.kind == "causally_related",
-          source_function = by_id[from_call.source_id],
-          reducer_function = by_id[from_call.target_id],
-          not is_nil(source_function),
-          not is_nil(reducer_function),
-          String.contains?(from_call.rationale, "direct lexical alias"),
-          delivery <- relations,
-          delivery.kind == "may_deliver_to" and delivery.source_id == source_function.entity.id,
-          handler <- entries,
-          handler.fact.kind == :handler and handler.entity.id == delivery.target_id,
-          handler_function <- entries,
-          handler_function.fact.kind == :function and
-            handler_function.path == handler.path and
-            handler_function.fact.subject == handler.fact.subject and
-            handler_function.fact.details["clause"] == handler.fact.details["clause"],
-          capture <- relations,
-          capture.kind == "causally_related" and
-            capture.source_id == handler_function.entity.id and
-            String.contains?(capture.rationale, "Enum.each source capture"),
-          executor = by_id[capture.target_id],
-          not is_nil(executor),
-          compatible_flow_hints?(hints, source_function, handler, executor, reducer_function),
-          do: {reducer_function, executor, from_call, delivery, capture}
+    candidate_paths = candidate_paths(entries, hints, relations, by_id)
 
     for intent <- entries,
         intent.fact.kind == :intent_candidate and
@@ -543,41 +581,111 @@ defmodule BeamCompass.Behavior.Export do
           intent.fact.details["clause"] == reducer.fact.details["clause"],
         executor_tag?(executor, intent, entries) do
       relation(
-        "causally_related", intent, executor, intent,
-        "possible", "proposed",
+        "causally_related",
+        intent,
+        executor,
+        intent,
+        "possible",
+        "proposed",
         "source candidate: reducer call, self-message callback and Enum.each capture with matching tagged execute clause; value flow/dispatch unverified",
         [call_edge, delivery_edge, capture_edge]
       )
     end
   end
 
+  defp candidate_paths(entries, hints, relations, by_id) do
+    for edge <- relations,
+        edge.kind == "causally_related" and
+          String.contains?(edge.rationale, "direct lexical alias"),
+        caller = by_id[edge.source_id],
+        reducer = by_id[edge.target_id],
+        not is_nil(caller) and not is_nil(reducer),
+        tail <- delivery_paths(caller, reducer, entries, hints, relations, by_id),
+        do: Tuple.insert_at(tail, 2, edge)
+  end
+
+  defp delivery_paths(caller, reducer, entries, hints, relations, by_id) do
+    for delivery <- relations,
+        delivery.kind == "may_deliver_to" and delivery.source_id == caller.entity.id,
+        handler <- entries,
+        handler.fact.kind == :handler and handler.entity.id == delivery.target_id,
+        {executor, capture} <- captured_executors(handler, entries, relations, by_id),
+        compatible_flow_hints?(hints, caller, handler, executor, reducer),
+        do: {reducer, executor, delivery, capture}
+  end
+
+  defp captured_executors(handler, entries, relations, by_id) do
+    for function <- entries,
+        same_clause?(function, handler) and function.fact.kind == :function,
+        capture <- relations,
+        capture.kind == "causally_related" and capture.source_id == function.entity.id,
+        String.contains?(capture.rationale, "Enum.each source capture"),
+        executor = by_id[capture.target_id],
+        not is_nil(executor),
+        do: {executor, capture}
+  end
+
+  defp same_clause?(left, right) do
+    left.path == right.path and left.fact.subject == right.fact.subject and
+      left.fact.details["clause"] == right.fact.details["clause"]
+  end
+
   defp compatible_flow_hints?(hints, caller, handler, executor, reducer) do
-    bindings = Enum.filter(hints, fn h ->
-      h.kind == :result_binding and h.subject == caller.fact.subject and
-        h.clause == caller.fact.details["clause"] and h.target == reducer.fact.subject
-    end)
+    bindings = Enum.filter(hints, &binding_hint?(&1, caller, reducer))
+    sends = Enum.filter(hints, &send_hint?(&1, caller, handler))
+    captures = Enum.filter(hints, &capture_hint?(&1, handler, executor))
 
-    sends = Enum.filter(hints, fn h ->
-      h.kind == :send and h.receiver == "self()" and h.subject == caller.fact.subject and
-        CausalHints.payload_matches?(h.payload, handler.fact.object)
-    end)
+    for binding <- bindings,
+        variable <- binding.variables,
+        send_hint <- sends,
+        capture <- captures do
+      valid_transfer?(binding, variable, send_hint, capture, handler, hints)
+    end
+    |> Enum.any?()
+  end
 
-    captures = Enum.filter(hints, fn h ->
-      h.kind == :capture and h.subject == handler.fact.subject and
-        h.clause == handler.fact.details["clause"] and h.target == executor.fact.subject
-    end)
+  defp valid_transfer?(binding, variable, send_hint, capture, handler, hints) do
+    before?(binding, send_hint) and
+      not overwritten?(hints, binding, send_hint, variable) and
+      not overwritten?(hints, nil, capture, capture.collection) and
+      CausalHints.transferred_variable?(
+        send_hint.payload,
+        handler.fact.object,
+        variable,
+        capture.collection
+      )
+  end
 
-    Enum.any?(bindings, fn binding ->
-      Enum.any?(binding.variables, fn source_variable ->
-        Enum.any?(sends, fn send_hint ->
-          Enum.any?(captures, fn capture ->
-            CausalHints.transferred_variable?(
-              send_hint.payload, handler.fact.object, source_variable, capture.collection
-            )
-          end)
-        end)
-      end)
+  defp before?(left, right), do: {left.line, left.column} < {right.line, right.column}
+
+  defp overwritten?(hints, start, finish, variable) do
+    Enum.any?(hints, fn hint ->
+      hint.kind in [:assignment, :result_binding] and hint.path == finish.path and
+        hint.subject == finish.subject and hint.clause == finish.clause and
+        variable in hint.variables and before?(hint, finish) and after_start?(hint, start)
     end)
+  end
+
+  defp after_start?(_hint, nil), do: true
+  defp after_start?(hint, start), do: before?(start, hint)
+
+  defp hint_clause?(hint, entry) do
+    hint.path == entry.path and hint.subject == entry.fact.subject and
+      hint.clause == entry.fact.details["clause"]
+  end
+
+  defp binding_hint?(hint, caller, reducer) do
+    hint.kind == :result_binding and hint_clause?(hint, caller) and
+      hint.target == reducer.fact.subject
+  end
+
+  defp send_hint?(hint, caller, handler) do
+    hint.kind == :send and hint.receiver == "self()" and hint_clause?(hint, caller) and
+      CausalHints.payload_matches?(hint.payload, handler.fact.object)
+  end
+
+  defp capture_hint?(hint, handler, executor) do
+    hint.kind == :capture and hint_clause?(hint, handler) and hint.target == executor.fact.subject
   end
 
   defp executor_tag?(executor, intent, entries) do
@@ -598,11 +706,28 @@ defmodule BeamCompass.Behavior.Export do
   # Hints alone never create facts, nor do aliases imply a runtime target.
   defp message_relations(hint, entries) do
     case hint.kind do
-      :genserver -> messaging_relations(hint, entries, :call)
-      :send -> messaging_relations(hint, entries, :message_send)
-      :alias_call -> lexical_relations(hint, entries, "direct lexical alias call; macro expansion/dynamic dispatch unknown")
-      :capture -> lexical_relations(hint, entries, "Enum.each source capture; invocation/element values unverified")
-      _ -> []
+      :genserver ->
+        messaging_relations(hint, entries, :call)
+
+      :send ->
+        messaging_relations(hint, entries, :message_send)
+
+      :alias_call ->
+        lexical_relations(
+          hint,
+          entries,
+          "direct lexical alias call; macro expansion/dynamic dispatch unknown"
+        )
+
+      :capture ->
+        lexical_relations(
+          hint,
+          entries,
+          "Enum.each source capture; invocation/element values unverified"
+        )
+
+      _ ->
+        []
     end
   end
 
@@ -620,55 +745,79 @@ defmodule BeamCompass.Behavior.Export do
   defp messaging_relations(hint, entries, kind) do
     case matching_sites(hint, entries, kind) do
       [site] ->
-        with_function(site, entries, fn function ->
-          unresolved =
-            if kind == :call do
-              [relation("sends", function, nil, site, "unresolved", "unresolved",
-                "GenServer send semantics require runtime address/delivery evidence")]
-            else
-              # The scanner already exports unresolved send/2 for this source.
-              []
-            end
+        with_function(site, entries, &message_candidates(&1, site, hint, entries, kind))
 
-          target_module = if(hint.receiver == "__MODULE__" or hint.receiver == "self()", do: hint.module, else: hint.receiver)
-          candidates =
-            Enum.filter(entries, fn entry ->
-              entry.fact.kind == :handler and entry.project == site.project and
-                entry.fact.subject == "#{target_module}.#{hint.handler}" and
-                CausalHints.payload_matches?(hint.payload, entry.fact.object)
-            end)
-
-          match =
-            case candidates do
-              [handler] ->
-                [relation("may_deliver_to", function, handler, site, "possible", "proposed",
-                  "literal address/tag and unique callback pattern; PID, delivery, guard and runtime order unverified")]
-              _ -> []
-            end
-
-          unresolved ++ match
-        end)
-      _ -> []
+      _ ->
+        []
     end
   end
+
+  defp message_candidates(function, site, hint, entries, kind) do
+    unresolved =
+      if kind == :call do
+        [
+          relation(
+            "sends",
+            function,
+            nil,
+            site,
+            "unresolved",
+            "unresolved",
+            "GenServer send semantics require runtime address/delivery evidence"
+          )
+        ]
+      else
+        []
+      end
+
+    target_module =
+      if hint.receiver in ["__MODULE__", "self()"], do: hint.module, else: hint.receiver
+
+    candidates = Enum.filter(entries, &message_handler?(&1, site, hint, target_module))
+    unresolved ++ unique_delivery(candidates, function, site)
+  end
+
+  defp message_handler?(entry, site, hint, target_module) do
+    entry.fact.kind == :handler and entry.project == site.project and
+      entry.fact.subject == "#{target_module}.#{hint.handler}" and
+      CausalHints.payload_matches?(hint.payload, entry.fact.object)
+  end
+
+  defp unique_delivery([handler], function, site) do
+    [
+      relation(
+        "may_deliver_to",
+        function,
+        handler,
+        site,
+        "possible",
+        "proposed",
+        "literal address/tag and unique callback pattern; PID, delivery, guard and runtime order unverified"
+      )
+    ]
+  end
+
+  defp unique_delivery(_, _, _), do: []
 
   defp lexical_relations(hint, entries, rationale) do
     case matching_sites(hint, entries, :call) do
       [site] ->
-        with_function(site, entries, fn function ->
-          # Multiple clauses can be selected only at runtime: each remains
-          # source-possible rather than spuriously choosing one overload.
-          entries
-          |> Enum.filter(fn entry ->
-            entry.fact.kind == :function and entry.project == site.project and
-              entry.fact.subject == hint.target
-          end)
-          |> Enum.map(fn target ->
-            relation("causally_related", function, target, site, "possible", "proposed", rationale)
-          end)
-        end)
-      _ -> []
+        with_function(site, entries, &lexical_targets(&1, site, hint, entries, rationale))
+
+      _ ->
+        []
     end
+  end
+
+  defp lexical_targets(function, site, hint, entries, rationale) do
+    entries
+    |> Enum.filter(fn entry ->
+      entry.fact.kind == :function and entry.project == site.project and
+        entry.fact.subject == hint.target
+    end)
+    |> Enum.map(
+      &relation("causally_related", function, &1, site, "possible", "proposed", rationale)
+    )
   end
 
   defp unresolved_from_function(kind, entry, entries, reason) do

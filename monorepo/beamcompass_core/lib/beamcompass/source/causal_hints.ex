@@ -63,15 +63,19 @@ defmodule BeamCompass.Source.CausalHints do
   defp compatible?(ls, rs) when is_list(ls) and is_list(rs), do: match_parts(ls, rs)
 
   defp compatible?(left, right) do
-    if variable?(left) or variable?(right), do: true, else: Macro.to_string(left) == Macro.to_string(right)
+    if variable?(left) or variable?(right),
+      do: true,
+      else: Macro.to_string(left) == Macro.to_string(right)
   end
 
   defp match_parts(left, right) do
     length(left) == length(right) and
-      (Enum.zip(left, right) |> Enum.all?(fn {a, b} -> compatible?(a, b) end))
+      Enum.zip(left, right) |> Enum.all?(fn {a, b} -> compatible?(a, b) end)
   end
 
-  defp variable?({name, _, scope}) when is_atom(name) and (is_atom(scope) or is_nil(scope)), do: true
+  defp variable?({name, _, scope}) when is_atom(name) and (is_atom(scope) or is_nil(scope)),
+    do: true
+
   defp variable?(_), do: false
 
   defp modules(ast) do
@@ -88,37 +92,51 @@ defmodule BeamCompass.Source.CausalHints do
   end
 
   defp module_hints({module_name, body}) do
-    module_forms = forms(body)
-    aliases = module_aliases(module_forms)
+    {_aliases, hints} =
+      Enum.reduce(forms(body), {%{}, []}, fn form, {aliases, hints} ->
+        updated = module_aliases([form], aliases)
+        {updated, hints ++ form_hints(form, module_name, aliases)}
+      end)
 
-    module_forms
-    |> Enum.flat_map(fn
-      {visibility, _, [head, options]} when visibility in [:def, :defp] and is_list(options) ->
-        case head_name(head) do
-          {name, arity} ->
-            expression = Keyword.get(options, :do)
-            calls(expression, module_name, "#{module_name}.#{name}/#{arity}", Macro.to_string(head), aliases)
-
-          nil -> []
-        end
-
-      _ -> []
-    end)
+    hints
   end
 
-  defp module_aliases(module_forms) do
+  defp form_hints({visibility, _, [head, options]}, module_name, aliases)
+       when visibility in [:def, :defp] and is_list(options) do
+    case head_name(head) do
+      {name, arity} ->
+        calls(
+          Keyword.get(options, :do),
+          module_name,
+          "#{module_name}.#{name}/#{arity}",
+          Macro.to_string(head),
+          aliases
+        )
+
+      nil ->
+        []
+    end
+  end
+
+  defp form_hints(_, _, _), do: []
+
+  defp module_aliases(module_forms, initial) do
     module_forms
-    |> Enum.reduce(%{}, fn
+    |> Enum.reduce(initial, fn
       {:alias, _, [name]}, aliases ->
         text = Macro.to_string(name)
         Map.put(aliases, text |> String.split(".") |> List.last(), text)
 
       {:alias, _, [name, opts]}, aliases when is_list(opts) ->
         text = Macro.to_string(name)
-        alias_text = opts |> Keyword.get(:as, name) |> Macro.to_string() |> String.split(".") |> List.last()
+
+        alias_text =
+          opts |> Keyword.get(:as, name) |> Macro.to_string() |> String.split(".") |> List.last()
+
         Map.put(aliases, alias_text, text)
 
-      _, aliases -> aliases
+      _, aliases ->
+        aliases
     end)
   end
 
@@ -142,7 +160,11 @@ defmodule BeamCompass.Source.CausalHints do
     Enum.reverse(hints)
   end
 
-  defp location(meta), do: %{line: max(1, Keyword.get(meta, :line, 1)), column: max(1, Keyword.get(meta, :column, 1))}
+  defp location(meta),
+    do: %{
+      line: max(1, Keyword.get(meta, :line, 1)),
+      column: max(1, Keyword.get(meta, :column, 1))
+    }
 
   defp basic(module_name, subject, clause, meta) do
     Map.merge(%{module: module_name, subject: subject, clause: clause}, location(meta))
@@ -163,9 +185,16 @@ defmodule BeamCompass.Source.CausalHints do
     end
   end
 
-  defp hint({:=, meta, [pattern, {{:., _, [receiver, function]}, _, args}]}, module_name, subject, clause, aliases)
+  defp hint(
+         {:=, meta, [pattern, {{:., _, [receiver, function]}, _, args}]},
+         module_name,
+         subject,
+         clause,
+         aliases
+       )
        when is_atom(function) and is_list(args) do
     owner = Macro.to_string(receiver)
+
     if Map.has_key?(aliases, owner) do
       # Only the final return-slot of a literal tuple can be treated as a
       # candidate emitted-effect collection. Another bound value (e.g. new
@@ -177,7 +206,7 @@ defmodule BeamCompass.Source.CausalHints do
         end
 
       if is_nil(variable) do
-        nil
+        assignment_hint(pattern, meta, module_name, subject, clause)
       else
         Map.merge(basic(module_name, subject, clause, meta), %{
           kind: :result_binding,
@@ -185,7 +214,13 @@ defmodule BeamCompass.Source.CausalHints do
           variables: [variable]
         })
       end
+    else
+      assignment_hint(pattern, meta, module_name, subject, clause)
     end
+  end
+
+  defp hint({:=, meta, [pattern, _value]}, module_name, subject, clause, _aliases) do
+    assignment_hint(pattern, meta, module_name, subject, clause)
   end
 
   defp hint({:send, meta, [destination, payload]}, module_name, subject, clause, _aliases) do
@@ -197,9 +232,18 @@ defmodule BeamCompass.Source.CausalHints do
     })
   end
 
-  defp hint({{:., _, [receiver, :each]}, meta, [collection, capture]}, module_name, subject, clause, aliases) do
+  defp hint(
+         {{:., _, [receiver, :each]}, meta, [collection, capture]},
+         module_name,
+         subject,
+         clause,
+         aliases
+       ) do
     if Macro.to_string(receiver) == "Enum" do
-      case Regex.run(~r/^&([A-Z][A-Za-z0-9_.]*)\.([a-z_][a-zA-Z0-9_!?]*)\/(\d+)$/, Macro.to_string(capture)) do
+      case Regex.run(
+             ~r/^&([A-Z][A-Za-z0-9_.]*)\.([a-z_][a-zA-Z0-9_!?]*)\/(\d+)$/,
+             Macro.to_string(capture)
+           ) do
         [_, owner, function, arity] ->
           Map.merge(basic(module_name, subject, clause, meta), %{
             kind: :capture,
@@ -209,7 +253,8 @@ defmodule BeamCompass.Source.CausalHints do
             collection: Macro.to_string(collection)
           })
 
-        _ -> nil
+        _ ->
+          nil
       end
     end
   end
@@ -229,8 +274,24 @@ defmodule BeamCompass.Source.CausalHints do
 
   defp hint(_, _, _, _, _), do: nil
 
+  defp assignment_hint(pattern, meta, module_name, subject, clause) do
+    {_, names} =
+      Macro.prewalk(pattern, [], fn node, names ->
+        case variable_name(node) do
+          nil -> {node, names}
+          name -> {node, [name | names]}
+        end
+      end)
+
+    Map.merge(basic(module_name, subject, clause, meta), %{
+      kind: :assignment,
+      variables: Enum.uniq(names)
+    })
+  end
+
   defp variable_name({name, _, scope}) when is_atom(name) and (is_atom(scope) or is_nil(scope)),
     do: Atom.to_string(name)
+
   defp variable_name(_), do: nil
 
   defp normalize_owner(owner, aliases) do

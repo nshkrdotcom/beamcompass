@@ -56,8 +56,12 @@ defmodule BeamCompass.SourceProjectionTest do
 
     assert {:ok, snapshot} = BeamCompass.export_source(root, project_id: "test:uncertain")
     refute Enum.any?(snapshot["relations"], &(&1["kind"] == "may_deliver_to"))
-    assert Enum.any?(snapshot["relations"], &(&1["kind"] == "sends" and
-                                                   &1["resolution"] == "unresolved"))
+
+    assert Enum.any?(
+             snapshot["relations"],
+             &(&1["kind"] == "sends" and
+                 &1["resolution"] == "unresolved")
+           )
   end
 
   test "unique syntactic executor tag is a possible candidate, never a performer claim" do
@@ -75,8 +79,12 @@ defmodule BeamCompass.SourceProjectionTest do
     assert Enum.all?(possible, &(&1["epistemic_status"] == "proposed"))
     assert Enum.all?(possible, &(indexed[&1["target_id"]]["kind"] == "function"))
 
-    assert Enum.any?(snapshot["relations"], &(&1["kind"] == "performs_effect" and
-                                                   &1["resolution"] == "unresolved"))
+    assert Enum.any?(
+             snapshot["relations"],
+             &(&1["kind"] == "performs_effect" and
+                 &1["resolution"] == "unresolved")
+           )
+
     assert :ok = Validator.validate(snapshot)
   end
 
@@ -97,8 +105,11 @@ defmodule BeamCompass.SourceProjectionTest do
                indexed[r["source_id"]]["kind"] == "effect_intent"
            end)
 
-    assert Enum.any?(snapshot["relations"], &(&1["kind"] == "performs_effect" and
-                                                   &1["resolution"] == "unresolved"))
+    assert Enum.any?(
+             snapshot["relations"],
+             &(&1["kind"] == "performs_effect" and
+                 &1["resolution"] == "unresolved")
+           )
   end
 
   test "bounded recursive capsule paths expand every included source reference", %{root: root} do
@@ -119,9 +130,13 @@ defmodule BeamCompass.SourceProjectionTest do
     refute capsule["truncated"]
     assert capsule["cut_relation_ids"] == []
     assert capsule["ordering"] == "not_observed_or_runtime_proven"
+
     assert Enum.any?(capsule["relation_ids"], fn id ->
-             Enum.any?(snapshot["relations"], &(&1["id"] == id and
-                                                      &1["kind"] == "may_deliver_to"))
+             Enum.any?(
+               snapshot["relations"],
+               &(&1["id"] == id and
+                   &1["kind"] == "may_deliver_to")
+             )
            end)
 
     assert {:ok, req} = BeamCompass.projection_request(snapshot, lens: :behavior, budget: 20)
@@ -151,17 +166,23 @@ defmodule BeamCompass.SourceProjectionTest do
     assert {:ok, result} = BeamCompass.project_source(snapshot, request)
     assert length(result["visible"]) <= 1
     refute ref in result["visible"]
+
     assert Enum.any?(result["receipt"]["witnesses"], fn witness ->
              witness["requested"] == ref and witness["status"] == "budget_lost"
            end)
+
     assert result["receipt"]["status"] == "unsatisfied"
     assert result["receipt"]["completeness"] == "incomplete_preservation"
     assert result["receipt"]["unsatisfied"] != []
+
     assert Enum.all?(result["receipt"]["unsatisfied"], fn missing ->
-             Enum.any?(result["omitted"], &(&1["reference"] == missing))
+             Enum.any?(result["receipt"]["witnesses"], fn witness ->
+               witness["requested"] == missing and witness["status"] != "preserved"
+             end)
            end)
 
     assert result["unknown"] != []
+
     assert Enum.all?(result["unknown"], fn unknown ->
              assert unknown["reason"] == "unresolved_source_relation"
              {:ok, item} = BeamCompass.resolve_source_reference(snapshot, unknown["reference"])
@@ -219,11 +240,22 @@ defmodule BeamCompass.SourceProjectionTest do
              BeamCompass.projection_request(snapshot, preserve: ["not_a_reference"])
 
     assert {:error, :invalid_projection_preserve} =
-             BeamCompass.project_source(snapshot, put_in(request, ["preserve", "references"], [false]))
+             BeamCompass.project_source(
+               snapshot,
+               put_in(request, ["preserve", "references"], [false])
+             )
 
     assert {:error, :unsupported_projection_reference_kind} =
              BeamCompass.projection_request(snapshot,
-               focus: elem(BeamCompass.source_reference(snapshot, "evidence", hd(snapshot["evidence"])["id"]), 1)
+               focus:
+                 elem(
+                   BeamCompass.source_reference(
+                     snapshot,
+                     "evidence",
+                     hd(snapshot["evidence"])["id"]
+                   ),
+                   1
+                 )
              )
 
     bad = put_in(snapshot, ["manifest", "providers", Access.at(0), "mode"], "observed")
@@ -231,7 +263,8 @@ defmodule BeamCompass.SourceProjectionTest do
     assert {:error, :invalid_envelope} = BeamCompass.project_source(%{}, request)
   end
 
-  test "mutation fidelity: changed transition evidence and removed executor effect remain distinct", %{root: root} do
+  test "mutation fidelity: changed transition evidence and removed executor effect remain distinct",
+       %{root: root} do
     source = """
     defmodule Mutation do
       def step(state), do: {Map.put(state, :status, :pending), [{:dispatch, :notify}]}
@@ -255,8 +288,13 @@ defmodule BeamCompass.SourceProjectionTest do
     assert {:ok, no_io} = BeamCompass.export_source(root, project_id: "test:mutation")
     assert io_performer?(baseline)
     refute io_performer?(no_io)
-    assert Enum.any?(no_io["relations"], &(&1["kind"] == "performs_effect" and
-                                                    &1["resolution"] == "unresolved"))
+
+    assert Enum.any?(
+             no_io["relations"],
+             &(&1["kind"] == "performs_effect" and
+                 &1["resolution"] == "unresolved")
+           )
+
     assert Enum.any?(no_io["entities"], &(&1["kind"] == "effect_intent"))
   end
 
@@ -271,8 +309,12 @@ defmodule BeamCompass.SourceProjectionTest do
 
     # Typed question answers use matched endpoints and source uncertainty,
     # rather than the presence of an unrelated relation KIND in the graph.
-    query = %{"id" => "authorize_route", "kind" => "message_receivers",
-              "subject" => "LedgerSample.Server.authorize/1"}
+    query = %{
+      "id" => "authorize_route",
+      "kind" => "message_receivers",
+      "subject" => "LedgerSample.Server.authorize/1"
+    }
+
     assert {:ok, answer} = BeamCompass.answer_source(snapshot, query)
     assert answer["status"] == "source_possible"
     assert Enum.any?(answer["answers"], &String.contains?(&1["target_label"], "handle_call/3"))

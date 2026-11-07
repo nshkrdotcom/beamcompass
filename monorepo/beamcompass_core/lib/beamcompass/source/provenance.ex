@@ -66,7 +66,12 @@ defmodule BeamCompass.Source.Provenance do
       {:ok, facts} ->
         additions = BoundaryHints.scan(source.bytes, source.path)
         all = (facts ++ additions) |> Enum.uniq_by(& &1.id) |> Enum.sort_by(& &1.id)
-        Map.merge(Map.delete(source, :bytes), %{facts: all, hints: CausalHints.scan(source.bytes), issue: nil})
+
+        Map.merge(Map.delete(source, :bytes), %{
+          facts: all,
+          hints: CausalHints.scan(source.bytes),
+          issue: nil
+        })
 
       {:error, reason} ->
         Map.merge(Map.delete(source, :bytes), %{facts: [], hints: [], issue: reason})

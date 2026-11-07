@@ -5,13 +5,17 @@ defmodule BeamCompass.SemanticDepthTest do
   alias BeamCompass.Json
 
   setup do
-    root = Path.join(System.tmp_dir!(), "beamcompass_p03_depth_#{System.unique_integer([:positive])}")
+    root =
+      Path.join(System.tmp_dir!(), "beamcompass_p03_depth_#{System.unique_integer([:positive])}")
+
     File.mkdir_p!(root)
     on_exit(fn -> File.rm_rf!(root) end)
     {:ok, root: root}
   end
 
-  test "literal cross-process GenServer route is possible with unresolved transport", %{root: root} do
+  test "literal cross-process GenServer route is possible with unresolved transport", %{
+    root: root
+  } do
     write_source(root, """
     defmodule Postal.Server do
       use GenServer
@@ -30,8 +34,13 @@ defmodule BeamCompass.SemanticDepthTest do
     assert candidate["epistemic_status"] == "proposed"
     assert source_label(snapshot, candidate) =~ "Postal.Client.dispatch/1"
     assert target_label(snapshot, candidate) =~ "Postal.Server.handle_cast/2"
-    assert Enum.any?(snapshot["relations"], &(&1["kind"] == "sends" and
-                                                     &1["resolution"] == "unresolved"))
+
+    assert Enum.any?(
+             snapshot["relations"],
+             &(&1["kind"] == "sends" and
+                 &1["resolution"] == "unresolved")
+           )
+
     assert :ok = Validator.validate(snapshot)
   end
 
@@ -51,8 +60,12 @@ defmodule BeamCompass.SemanticDepthTest do
 
     snapshot = export(root)
     refute Enum.any?(snapshot["relations"], &(&1["kind"] == "may_deliver_to"))
-    assert Enum.count(snapshot["relations"], &(&1["kind"] == "sends" and
-                                                       &1["resolution"] == "unresolved")) >= 2
+
+    assert Enum.count(
+             snapshot["relations"],
+             &(&1["kind"] == "sends" and
+                 &1["resolution"] == "unresolved")
+           ) >= 2
   end
 
   test "candidate reducer-to-executor chain requires effect-variable transfer", %{root: root} do
@@ -73,15 +86,24 @@ defmodule BeamCompass.SemanticDepthTest do
 
     # Wrong variable: send updated state rather than emitted effects. A tag
     # match alone is not proof of a reducer/interpreter handoff.
-    File.write!(Path.join(root, "lib/server.ex"),
-      String.replace(source, "{:run_effects, effects}", "{:run_effects, updated}", global: false))
+    File.write!(
+      Path.join(root, "lib/server.ex"),
+      String.replace(source, "{:run_effects, effects}", "{:run_effects, updated}", global: false)
+    )
+
     broken = export(root)
     assert flow_edges(broken) == []
-    assert Enum.any?(broken["relations"], &(&1["kind"] == "performs_effect" and
-                                                   &1["resolution"] == "unresolved"))
+
+    assert Enum.any?(
+             broken["relations"],
+             &(&1["kind"] == "performs_effect" and
+                 &1["resolution"] == "unresolved")
+           )
   end
 
-  test "static supervisor membership and explicit failure/decision sites remain candidates", %{root: root} do
+  test "static supervisor membership and explicit failure/decision sites remain candidates", %{
+    root: root
+  } do
     write_source(root, """
     defmodule Child do
       use GenServer
@@ -103,10 +125,19 @@ defmodule BeamCompass.SemanticDepthTest do
     kinds = Enum.map(snapshot["entities"], & &1["kind"])
     assert "decision" in kinds
     assert "failure_boundary" in kinds
-    assert Enum.any?(snapshot["relations"], &(&1["kind"] == "supervises" and
-                                                   &1["resolution"] == "possible"))
-    assert Enum.any?(snapshot["relations"], &(&1["kind"] == "may_restart" and
-                                                   &1["resolution"] == "possible"))
+
+    assert Enum.any?(
+             snapshot["relations"],
+             &(&1["kind"] == "supervises" and
+                 &1["resolution"] == "possible")
+           )
+
+    assert Enum.any?(
+             snapshot["relations"],
+             &(&1["kind"] == "may_restart" and
+                 &1["resolution"] == "possible")
+           )
+
     assert :ok = Validator.validate(snapshot)
   end
 
@@ -114,8 +145,10 @@ defmodule BeamCompass.SemanticDepthTest do
     snapshot = sample()
     effect = Enum.find(snapshot["entities"], &(&1["kind"] == "effect"))
     {:ok, ref} = BeamCompass.source_reference(snapshot, "entity", effect["id"])
-    {:ok, full_request} = BeamCompass.projection_request(snapshot, lens: :behavior, budget: 256,
-                                                          preserve: [ref])
+
+    {:ok, full_request} =
+      BeamCompass.projection_request(snapshot, lens: :behavior, budget: 256, preserve: [ref])
+
     {:ok, full} = BeamCompass.project_source(snapshot, full_request)
     witness = Enum.find(full["receipt"]["witnesses"], &(&1["requested"] == ref))
     assert witness["path_supported"]
@@ -124,14 +157,17 @@ defmodule BeamCompass.SemanticDepthTest do
     assert Enum.all?(witness["dependency_refs"], &(&1 in full["visible"]))
     assert full["receipt"]["status"] == "satisfied"
 
-    {:ok, tiny_request} = BeamCompass.projection_request(snapshot, lens: :effects, budget: 1,
-                                                          preserve: [ref])
+    {:ok, tiny_request} =
+      BeamCompass.projection_request(snapshot, lens: :effects, budget: 1, preserve: [ref])
+
     {:ok, tiny} = BeamCompass.project_source(snapshot, tiny_request)
     tiny_witness = Enum.find(tiny["receipt"]["witnesses"], &(&1["requested"] == ref))
     assert tiny_witness["status"] == "budget_lost"
     assert tiny["receipt"]["status"] == "unsatisfied"
     assert ref in tiny["receipt"]["unsatisfied"]
-    assert Json.encode(tiny) == Json.encode(elem(BeamCompass.project_source(snapshot, tiny_request), 1))
+
+    assert Json.encode(tiny) ==
+             Json.encode(elem(BeamCompass.project_source(snapshot, tiny_request), 1))
   end
 
   test "question oracle scores precise endpoints, unknowns and false positives" do
@@ -148,9 +184,11 @@ defmodule BeamCompass.SemanticDepthTest do
     assert report["metrics"]["unknown_rate"] > 0.0
     assert :ok = Validator.validate(snapshot)
 
-    altered = List.update_at(oracles, 0, fn oracle ->
-      Map.put(oracle, "expected_targets", ["Nonexistent.callback/1"])
-    end)
+    altered =
+      List.update_at(oracles, 0, fn oracle ->
+        Map.put(oracle, "expected_targets", ["Nonexistent.callback/1"])
+      end)
+
     assert {:ok, falsified} = BeamCompass.benchmark_source(snapshot, altered)
     assert falsified["metrics"]["false_positive"] > 0
     assert falsified["metrics"]["false_negative"] > 0
@@ -163,6 +201,7 @@ defmodule BeamCompass.SemanticDepthTest do
       def execute({:dispatch, _x}), do: IO.puts("sent")
     end
     """
+
     write_source(root, original)
     before = export(root)
     question = %{"id" => "probe", "kind" => "effect_sites", "subject" => "Probe.execute/1"}
@@ -184,6 +223,7 @@ defmodule BeamCompass.SemanticDepthTest do
       def execute(value), do: IO.puts(value)
     end
     """
+
     write_source(root, source)
     first = export(root)
     question = %{"id" => "stable", "kind" => "effect_sites", "subject" => "Stable.execute/1"}
@@ -192,15 +232,19 @@ defmodule BeamCompass.SemanticDepthTest do
     write_source(root, "\n\n" <> source)
     second = export(root)
     {:ok, two} = BeamCompass.answer_source(second, question)
+
     assert Enum.map(one["answers"], & &1["target_label"]) ==
              Enum.map(two["answers"], & &1["target_label"])
+
     assert Enum.map(one["answers"], & &1["target"]["object_id"]) ==
              Enum.map(two["answers"], & &1["target"]["object_id"])
+
     refute first["snapshot_id"] == second["snapshot_id"]
   end
 
   defp flow_edges(snapshot) do
     index = Map.new(snapshot["entities"], &{&1["id"], &1})
+
     Enum.filter(snapshot["relations"], fn r ->
       r["kind"] == "causally_related" and
         index[r["source_id"]]["kind"] == "effect_intent"
@@ -238,18 +282,48 @@ defmodule BeamCompass.SemanticDepthTest do
 
   defp fixture_oracles do
     [
-      oracle("q1", "message_receivers", "LedgerSample.Server.authorize/1",
-        ["LedgerSample.Server.handle_call/3"], true),
-      oracle("q2", "state_writes", "LedgerSample.Ledger.step/2",
-        ["LedgerSample.Ledger.step/2 · Map.put/3"], true),
-      oracle("q3", "message_receivers", "LedgerSample.Server.handle_call/3",
-        ["LedgerSample.Server.handle_info/2"], true),
-      oracle("q4", "effect_intents", "LedgerSample.Ledger.step/2",
-        [" · dispatch", " · emit"], true),
-      oracle("q5", "effect_sites", "LedgerSample.EffectExecutor.execute/1",
-        [" · IO.puts/1"], false),
-      oracle("q6", "intent_interpreters", "LedgerSample.Ledger.step/2",
-        ["LedgerSample.EffectExecutor.execute/1"], true),
+      oracle(
+        "q1",
+        "message_receivers",
+        "LedgerSample.Server.authorize/1",
+        ["LedgerSample.Server.handle_call/3"],
+        true
+      ),
+      oracle(
+        "q2",
+        "state_writes",
+        "LedgerSample.Ledger.step/2",
+        ["LedgerSample.Ledger.step/2 · Map.put/3"],
+        true
+      ),
+      oracle(
+        "q3",
+        "message_receivers",
+        "LedgerSample.Server.handle_call/3",
+        ["LedgerSample.Server.handle_info/2"],
+        true
+      ),
+      oracle(
+        "q4",
+        "effect_intents",
+        "LedgerSample.Ledger.step/2",
+        [" · dispatch", " · emit"],
+        true
+      ),
+      oracle(
+        "q5",
+        "effect_sites",
+        "LedgerSample.EffectExecutor.execute/1",
+        [" · IO.puts/1"],
+        false
+      ),
+      oracle(
+        "q6",
+        "intent_interpreters",
+        "LedgerSample.Ledger.step/2",
+        ["execute({:dispatch", "execute({:emit"],
+        true
+      ),
       oracle("q7", "effect_sites", "LedgerSample.Void.execute/1", [], true)
     ]
   end

@@ -84,21 +84,23 @@ defmodule BeamCompass.Analysis.CausalCapsules do
       context.incoming
       |> Map.get(id, [])
       |> Enum.filter(&(&1["kind"] == "handles"))
-      |> Enum.reduce(state, fn relation, acc ->
-        actor_id = relation["source_id"]
-
-        if Map.has_key?(acc.nodes, actor_id) or map_size(acc.nodes) < @entities do
-          acc
-          |> put_link(relation)
-          |> put_node(actor_id)
-          |> attach_state_holder(actor_id, context)
-          |> attach_supervision(actor_id, context)
-        else
-          put_cut(acc, relation["id"])
-        end
-      end)
+      |> Enum.reduce(state, &attach_owner(&1, &2, context))
     else
       state
+    end
+  end
+
+  defp attach_owner(relation, acc, context) do
+    actor_id = relation["source_id"]
+
+    if Map.has_key?(acc.nodes, actor_id) or map_size(acc.nodes) < @entities do
+      acc
+      |> put_link(relation)
+      |> put_node(actor_id)
+      |> attach_state_holder(actor_id, context)
+      |> attach_supervision(actor_id, context)
+    else
+      put_cut(acc, relation["id"])
     end
   end
 
@@ -121,6 +123,7 @@ defmodule BeamCompass.Analysis.CausalCapsules do
     |> Enum.filter(&(&1["kind"] in ~w(supervises may_restart)))
     |> Enum.reduce(state, fn relation, acc ->
       source = relation["source_id"]
+
       if Map.has_key?(acc.nodes, source) or map_size(acc.nodes) < @entities do
         acc |> put_link(relation) |> put_node(source)
       else
@@ -159,7 +162,7 @@ defmodule BeamCompass.Analysis.CausalCapsules do
         {state, queued}
 
       depth >= @hops or
-          (not Map.has_key?(state.nodes, target) and map_size(state.nodes) >= @entities) or
+        (not Map.has_key?(state.nodes, target) and map_size(state.nodes) >= @entities) or
           map_size(state.links) >= @relations ->
         {put_cut(state, relation["id"]), queued}
 
